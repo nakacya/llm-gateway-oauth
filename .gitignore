@@ -1,0 +1,273 @@
+# .gitignore
+# LiteLLM Gateway with OAuth2 + JWT
+
+# ========================================
+# 機密情報（絶対にコミットしない）
+# ========================================
+# 環境変数ファイル
+.env
+.env.local
+.env.*.local
+
+# ただし、サンプルファイルは含める
+!.env_sample
+
+# 設定ファイル（実際の値を含むもの）
+oauth2_proxy.cfg
+litellm_config.yaml
+
+# ただし、サンプルファイルは含める
+!oauth2_proxy.cfg.sample
+!litellm_config.yaml.sample
+
+# docker-compose.ymlに直接機密情報がある場合
+# docker-compose.yml
+# ただし、サンプルは含める
+!docker-compose.yml.sample
+
+# 証明書と鍵
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+
+# バックアップされた機密ファイル
+.env.bak
+.env.backup
+.env_backup_*
+oauth2_proxy.cfg.bak
+litellm_config.yaml.bak
+
+# HTML
+!admin_manager.html
+!token_manager.html
+
+# ========================================
+# Docker関連
+# ========================================
+# Dockerボリュームデータ
+data/
+volumes/
+postgres_data/
+clickhouse_data/
+redis_data/
+langfuse_data/
+
+# Dockerログ
+docker-compose.*.log
+
+# ========================================
+# バックアップファイル
+# ========================================
+backup/
+backup_*/
+backups/
+*.bak
+*.backup
+*.sql
+*.sql.gz
+*.tar.gz
+*.zip
+
+# ただし、サンプルのバックアップは除外しない
+# !*.sample.bak
+
+# ========================================
+# ログファイル
+# ========================================
+*.log
+logs/
+nginx_logs/
+openresty_logs/
+litellm_logs/
+oauth2_proxy_logs/
+
+# ========================================
+# 一時ファイル
+# ========================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========================================
+# IDE設定
+# ========================================
+.vscode/
+.idea/
+*.iml
+
+# ただし、推奨設定は含める
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ========================================
+# OS固有
+# ========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ========================================
+# Node.js（もしあれば）
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ========================================
+# Python（もしあれば）
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# ========================================
+# SSL証明書（Let's Encrypt等）
+# ========================================
+ssl/
+certs/
+letsencrypt/
+certbot/
+
+# ただし、ディレクトリ構造は残す
+!ssl/.gitkeep
+!certs/.gitkeep
+
+# ========================================
+# キャッシュ
+# ========================================
+.cache/
+*.cache
+.npm/
+.yarn/
+
+# ========================================
+# テストデータ
+# ========================================
+test_data/
+test_results/
+coverage/
+
+# ========================================
+# ドキュメント生成ファイル
+# ========================================
+docs/_build/
+docs/.doctrees/
+site/
+_site/
+
+# ========================================
+# その他
+# ========================================
+# セットアップスクリプトが生成するバックアップ
+backup_[0-9]*
+
+# 一時的な設定ファイル
+*.conf.tmp
+*.cfg.tmp
+*.yaml.tmp
+*.yml.tmp
+
+# Git関連
+*.orig
+*.rej
+*.patch
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+\#*\#
+.\#*
+
+# ========================================
+# プロジェクト固有
+# ========================================
+# 開発環境用のオーバーライド
+docker-compose.override.yml
+docker-compose.local.yml
+create_env_sample.sh
+*.broken
+*old
+*org
+*.sample.bak
+
+# ローカルテスト用
+local_test/
+sandbox/
+scratch/
+openresty/
+
+# 個人用メモ
+notes/
+TODO.txt
+NOTES.md
+.notes/
+
+# 実行時に生成されるファイル
+*.pid
+*.sock
+
+# ========================================
+# 重要な注意事項
+# ========================================
+# 
+# このプロジェクトでGitに含めるべきファイル:
+# ✓ .env_sample
+# ✓ oauth2_proxy.cfg.sample
+# ✓ litellm_config.yaml.sample
+# ✓ docker-compose.yml (環境変数使用の場合)
+# ✓ docker-compose.yml.sample (直接機密情報を含む場合)
+# ✓ README.md
+# ✓ ドキュメント（docs/）
+# ✓ スクリプト（scripts/）
+# ✓ Luaファイル（lua/）
+#
+# Gitに含めてはいけないファイル:
+# ✗ .env
+# ✗ oauth2_proxy.cfg (実際の値を含むもの)
+# ✗ litellm_config.yaml (実際の値を含むもの)
+# ✗ data/ (Dockerボリューム)
+# ✗ backup/ (バックアップ)
+# ✗ logs/ (ログファイル)
+# ✗ *.key, *.pem (証明書・秘密鍵)
+

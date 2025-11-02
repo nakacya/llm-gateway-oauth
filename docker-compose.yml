@@ -1,0 +1,221 @@
+services:
+  openresty:
+    build:
+      context: ./openresty
+      dockerfile: Dockerfile
+    image: openresty-custom:latest
+    container_name: openresty
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./lua:/usr/local/openresty/lualib/custom:ro
+      - ./token_manager.html:/usr/local/openresty/nginx/html/token_manager.html:ro
+      - ./admin_manager.html:/usr/local/openresty/nginx/html/admin_manager.html:ro  # 追加
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TZ=Asia/Tokyo
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}  # 追加
+      - ADMIN_EMAILS=${ADMIN_EMAILS}              # 追加
+      - ADMIN_DOMAINS=${ADMIN_DOMAINS}            # 追加
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}    # 追加
+      - LITELLM_SHARED_KEY=${LITELLM_SHARED_KEY} 
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      oauth2-proxy:
+        condition: service_started
+      redis:
+        condition: service_started
+      litellm:
+        condition: service_started
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: oauth2-proxy
+    command:
+      - --config=/etc/oauth2-proxy/oauth2_proxy.cfg
+    ports:
+      - "4180:4180"
+    volumes:
+      - ./oauth2_proxy.cfg:/etc/oauth2-proxy/oauth2_proxy.cfg:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - OAUTH2_PROXY_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECRET=${COOKIE_SECRET}
+      - OAUTH2_PROXY_UPSTREAMS=http://openresty:8080
+      - OAUTH2_PROXY_REDIS_CONNECTION_URL=redis://redis:6379
+      - TZ=Asia/Tokyo
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=http://langfuse:3000
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AZURE_API_KEY=${AZURE_API_KEY:-}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LITELLM_LOG=INFO
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - TZ=Asia/Tokyo
+      - DATABASE_URL=${DATABASE_URL}
+      - STORE_MODEL_IN_DB=true
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=http://langfuse:3000
+    command: --config /app/config.yaml --port 4000
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      langfuse:
+        condition: service_started
+      redis:
+        condition: service_started
+      litellm-db:
+        condition: service_healthy
+
+  litellm-db:
+    image: postgres:15-alpine
+    container_name: litellm-db
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - POSTGRES_USER=${LITELLM_DB_USER:-litellm}
+      - POSTGRES_PASSWORD=${LITELLM_DB_PASSWORD:-litellm_password}
+      - POSTGRES_DB=${LITELLM_DB_NAME:-litellm}
+      - TZ=Asia/Tokyo
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LITELLM_DB_USER:-litellm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: langfuse
+    ports:
+      - "3000:3000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER:-postgres}:${LANGFUSE_DB_PASSWORD:-postgres}@langfuse-db:5432/${LANGFUSE_DB_NAME:-langfuse}
+      - NEXTAUTH_URL=http://litellm.nakacya.jp:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - SALT=${SALT}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TELEMETRY_ENABLED=true
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000/${CLICKHOUSE_DB:-default}
+      - TZ=Asia/Tokyo
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_started
+      langfuse-db:
+        condition: service_healthy
+
+  langfuse-db:
+    image: postgres:15-alpine
+    container_name: langfuse-db
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - POSTGRES_USER=${LANGFUSE_DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${LANGFUSE_DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${LANGFUSE_DB_NAME:-langfuse}
+      - TZ=Asia/Tokyo
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23-alpine
+    container_name: langfuse-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB:-default}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - TZ=Asia/Tokyo
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    container_name: litellm-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Tokyo
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  langfuse-db-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  redis-data:
+    driver: local
+  litellm-db-data:
+    driver: local

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者管理 - LiteLLM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .admin-list {
+            margin-top: 20px;
+        }
+
+        .admin-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+        }
+
+        .admin-info {
+            flex: 1;
+        }
+
+        .admin-email {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .admin-meta {
+            font-size: 13px;
+            color: #777;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .badge-super {
+            background: #ffd700;
+            color: #333;
+        }
+
+        .badge-env {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-redis {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👥 管理者管理</h1>
+            <p>スーパー管理者専用</p>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- 管理者追加フォーム -->
+        <div class="card">
+            <h2>管理者を追加</h2>
+            <form id="add-admin-form">
+                <div class="form-group">
+                    <label for="admin-email">メールアドレス</label>
+                    <input type="email" id="admin-email" placeholder="user@example.com" required>
+                </div>
+                <button type="submit" class="btn">管理者を追加</button>
+            </form>
+        </div>
+
+        <!-- 管理者一覧 -->
+        <div class="card">
+            <h2>管理者一覧</h2>
+            <button class="btn" onclick="loadAdmins()" style="margin-bottom: 15px;">🔄 更新</button>
+            <div id="admin-list"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alertContainer.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // 管理者追加
+        document.getElementById('add-admin-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('admin-email').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/manage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || '管理者の追加に失敗しました');
+                }
+
+                showAlert(`${email} を管理者に追加しました`, 'success');
+                document.getElementById('admin-email').value = '';
+                loadAdmins();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        });
+
+        // 管理者一覧を読み込み
+        async function loadAdmins() {
+            const adminList = document.getElementById('admin-list');
+            adminList.innerHTML = '<div class="loading">読み込み中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/manage`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || '管理者一覧の取得に失敗しました');
+                }
+
+                const data = await response.json();
+
+                if (data.admins.length === 0) {
+                    adminList.innerHTML = '<p style="color: #999; text-align: center;">管理者がいません</p>';
+                    return;
+                }
+
+                adminList.innerHTML = data.admins.map(admin => {
+                    const badgeClass = admin.source === 'super_admin' ? 'badge-super' :
+                                      admin.source === 'environment' ? 'badge-env' : 'badge-redis';
+                    const badgeText = admin.source === 'super_admin' ? 'スーパー管理者' :
+                                     admin.source === 'environment' ? '環境変数' : 'Redis';
+
+                    return `
+                        <div class="admin-item">
+                            <div class="admin-info">
+                                <div class="admin-email">${admin.email}</div>
+                                <div class="admin-meta">
+                                    <span class="badge ${badgeClass}">${badgeText}</span>
+                                    ${admin.removable ? '' : '<span class="badge badge-env">削除不可</span>'}
+                                </div>
+                            </div>
+                            ${admin.removable ? `
+                                <button class="btn btn-danger" onclick="removeAdmin('${admin.email}')">
+                                    削除
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                adminList.innerHTML = `<p style="color: #dc3545;">${error.message}</p>`;
+            }
+        }
+
+        // 管理者削除
+        async function removeAdmin(email) {
+            if (!confirm(`本当に ${email} を管理者から削除しますか？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/manage`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || '管理者の削除に失敗しました');
+                }
+
+                showAlert(`${email} を管理者から削除しました`, 'success');
+                loadAdmins();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // 初期読み込み
+        loadAdmins();
+    </script>
+</body>
+</html>

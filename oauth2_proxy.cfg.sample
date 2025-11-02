@@ -1,0 +1,82 @@
+# oauth2_proxy.cfg.sample
+# OAuth2 Proxy設定のサンプルファイル
+#
+# 使用方法:
+# 1. cp oauth2_proxy.cfg.sample oauth2_proxy.cfg
+# 2. Auth0の設定値を記入
+
+## OAuth2 Proxy Configuration for Auth0
+
+# HTTPアドレス設定
+http_address = "0.0.0.0:4180"
+
+# アップストリーム（OpenRestyを指定）
+upstreams = [
+    "http://openresty:8080"
+]
+
+# Auth0設定
+provider = "oidc"
+provider_display_name = "Auth0"
+
+# Auth0のドメイン情報（要変更）
+oidc_issuer_url = "https://your-tenant.auth0.com/"
+# 例: "https://mycompany.auth0.com/"
+
+# Auth0で作成したアプリケーションの認証情報（要変更）
+client_id = "${AUTH0_CLIENT_ID}"
+client_secret = "${AUTH0_CLIENT_SECRET}"
+
+# リダイレクトURL（要変更）
+redirect_url = "http://your-domain.com/oauth2/callback"
+
+# メール認証設定
+email_domains = ["gmail.com"]  # すべてのメールドメインを許可
+# または特定のドメインのみ許可: email_domains = ["your-company.com"]
+
+# セッション設定
+cookie_name = "_oauth2_proxy"
+# 重要: cookie_secretはBase64エンコードされた32バイト
+# 生成方法: python3 -c 'import os,base64; print(base64.b64encode(os.urandom(32)).decode())'
+cookie_secret = "${OAUTH2_PROXY_COOKIE_SECRET}"
+# cookie_secure = true
+cookie_secure = false
+cookie_httponly = true
+cookie_samesite = "lax"
+
+# Cookie有効期限（デフォルト: 168時間 = 7日間）
+cookie_expire = "168h"
+cookie_refresh = "1h"
+
+# ユーザー情報をヘッダーで渡す設定
+pass_user_headers = true
+pass_access_token = false
+pass_authorization_header = false
+set_xauthrequest = true
+set_authorization_header = false
+
+# ユーザー情報として渡すヘッダー
+# Auth0からのメールアドレスをX-Forwarded-Emailヘッダーで渡す
+skip_provider_button = true
+
+# ログ設定
+request_logging = true
+auth_logging = true
+standard_logging = true
+
+# スキップ設定（認証不要のパス）
+skip_auth_routes = [
+    "^/health$",
+    "^/ping$"
+]
+
+# セキュリティ設定
+reverse_proxy = true
+real_client_ip_header = "X-Real-IP"
+
+# タイムアウト設定
+upstream_timeout = "30s"
+
+#
+session_store_type = "redis"
+redis_connection_url = "redis://redis:6379"
