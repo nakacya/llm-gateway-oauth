@@ -39,6 +39,7 @@ litellm_config.yaml
 .env_backup_*
 oauth2_proxy.cfg.bak
 litellm_config.yaml.bak
+*.backup.*
 
 # HTML
 !admin_manager.html
