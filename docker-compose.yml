@@ -13,6 +13,7 @@ services:
       - ./lua:/usr/local/openresty/lualib/custom:ro
       - ./token_manager.html:/usr/local/openresty/nginx/html/token_manager.html:ro
       - ./admin_manager.html:/usr/local/openresty/nginx/html/admin_manager.html:ro  # 追加
+      - ./token_session_manager.html:/usr/local/openresty/nginx/html/token_session_manager.html:ro
       - /etc/localtime:/etc/localtime:ro
     environment:
       - JWT_SECRET=${JWT_SECRET}

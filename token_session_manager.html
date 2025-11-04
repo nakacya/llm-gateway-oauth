@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token & Session 管理 - LLM Gateway</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            background: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #4a5568;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            background: #f7fafc;
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-box h3 {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .stat-box p {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .badge-expired {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .badge-revoked {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .token-id {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #4a5568;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a0aec0;
+        }
+
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Token & Session 管理</h1>
+            <p>管理者専用 - JWT Token と OAuth2 Session の統合管理</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('tokens')">🎫 JWT Tokens</button>
+            <button class="tab" onclick="switchTab('sessions')">👤 OAuth2 Sessions</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- Token管理タブ -->
+        <div id="tokens-tab" class="tab-content active">
+            <div class="card">
+                <h2>Token 統計</h2>
+                <div class="stats" id="token-stats">
+                    <div class="stat-box">
+                        <h3>Total Tokens</h3>
+                        <p id="total-tokens">-</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Active</h3>
+                        <p id="active-tokens">-</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Expired</h3>
+                        <p id="expired-tokens">-</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Revoked</h3>
+                        <p id="revoked-tokens">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Token 一覧</h2>
+                <div class="search-box">
+                    <input type="text" id="token-search" placeholder="🔍 ユーザーメールアドレスで検索...">
+                </div>
+                <button class="btn btn-primary" onclick="loadTokens()">🔄 更新</button>
+                <div id="token-list"></div>
+            </div>
+        </div>
+
+        <!-- Session管理タブ -->
+        <div id="sessions-tab" class="tab-content">
+            <div class="card">
+                <h2>Session 統計</h2>
+                <div class="stats" id="session-stats">
+                    <div class="stat-box">
+                        <h3>Active Sessions</h3>
+                        <p id="total-sessions">-</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Unique Users</h3>
+                        <p id="unique-users">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Session 一覧</h2>
+                <div class="search-box">
+                    <input type="text" id="session-search" placeholder="🔍 ユーザーメールアドレスで検索...">
+                </div>
+                <button class="btn btn-primary" onclick="loadSessions()">🔄 更新</button>
+                <div id="session-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let allTokens = [];
+        let allSessions = [];
+
+        // タブ切り替え
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            if (tabName === 'tokens') {
+                loadTokens();
+            } else if (tabName === 'sessions') {
+                loadSessions();
+            }
+        }
+
+        // アラート表示
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alertContainer.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Token一覧を読み込み
+        async function loadTokens() {
+            const tokenList = document.getElementById('token-list');
+            tokenList.innerHTML = '<div class="loading">読み込み中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/tokens`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Token一覧の取得に失敗しました');
+                }
+
+                const data = await response.json();
+                allTokens = data.tokens;
+
+                // 統計を更新
+                document.getElementById('total-tokens').textContent = data.summary.total;
+                document.getElementById('active-tokens').textContent = data.summary.active;
+                document.getElementById('expired-tokens').textContent = data.summary.expired;
+                document.getElementById('revoked-tokens').textContent = data.summary.revoked;
+
+                renderTokens(allTokens);
+
+            } catch (error) {
+                tokenList.innerHTML = `<div class="empty-state">${error.message}</div>`;
+            }
+        }
+
+        // Token一覧を表示
+        function renderTokens(tokens) {
+            const tokenList = document.getElementById('token-list');
+
+            if (tokens.length === 0) {
+                tokenList.innerHTML = '<div class="empty-state">Token がありません</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Token Name</th>
+                            <th>User Email</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tokens.map(token => `
+                            <tr>
+                                <td>
+                                    <strong>${token.token_name}</strong><br>
+                                    <span class="token-id">${token.token_id.substring(0, 16)}...</span>
+                                </td>
+                                <td>${token.user_email}</td>
+                                <td>${new Date(token.created_at * 1000).toLocaleString('ja-JP')}</td>
+                                <td>${new Date(token.expires_at * 1000).toLocaleString('ja-JP')}</td>
+                                <td>
+                                    <span class="badge badge-${token.status}">
+                                        ${token.status === 'active' ? 'アクティブ' : 
+                                          token.status === 'expired' ? '期限切れ' : '失効済み'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="actions">
+                                        ${token.status === 'active' ? `
+                                            <button class="btn btn-danger" onclick="revokeToken('${token.token_id}', '${token.user_email}')">
+                                                失効
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            tokenList.innerHTML = html;
+        }
+
+        // Token検索
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('token-search');
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const filtered = allTokens.filter(token => 
+                    token.user_email.toLowerCase().includes(query) ||
+                    token.token_name.toLowerCase().includes(query)
+                );
+                renderTokens(filtered);
+            });
+        });
+
+        // Token失効
+        async function revokeToken(tokenId, userEmail) {
+            if (!confirm(`本当に ${userEmail} の Token を失効しますか？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/tokens/${encodeURIComponent(tokenId)}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Token失効に失敗しました');
+                }
+
+                showAlert('Token を失効しました', 'success');
+                loadTokens();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // Session一覧を読み込み
+        async function loadSessions() {
+            const sessionList = document.getElementById('session-list');
+            sessionList.innerHTML = '<div class="loading">読み込み中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/sessions`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Session一覧の取得に失敗しました');
+                }
+
+                const data = await response.json();
+                
+                // sessions が配列であることを確認
+                allSessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+                // 統計を更新
+                document.getElementById('total-sessions').textContent = data.total || 0;
+                const uniqueUsers = new Set(allSessions.map(s => s.email)).size;
+                document.getElementById('unique-users').textContent = uniqueUsers;
+
+                renderSessions(allSessions);
+
+            } catch (error) {
+                console.error('Session load error:', error);
+                sessionList.innerHTML = `<div class="empty-state">${error.message}</div>`;
+            }
+        }
+
+        // Session一覧を表示
+        function renderSessions(sessions) {
+            const sessionList = document.getElementById('session-list');
+
+            // 配列チェック
+            if (!Array.isArray(sessions) || sessions.length === 0) {
+                sessionList.innerHTML = '<div class="empty-state">アクティブな Session がありません</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User Email</th>
+                            <th>Session Key</th>
+                            <th>TTL (seconds)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sessions.map(session => `
+                            <tr>
+                                <td><strong>${session.email || 'unknown'}</strong></td>
+                                <td><span class="token-id">${(session.session_key || '').substring(0, 40)}...</span></td>
+                                <td>${session.ttl_seconds > 0 ? session.ttl_seconds : 'No expiry'}</td>
+                                <td>
+                                    <button class="btn btn-danger" onclick="revokeSession('${session.session_key}', '${session.email}')">
+                                        削除
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            sessionList.innerHTML = html;
+        }
+
+        // Session検索
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('session-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    const filtered = Array.isArray(allSessions) ? allSessions.filter(session => 
+                        (session.email || '').toLowerCase().includes(query)
+                    ) : [];
+                    renderSessions(filtered);
+                });
+            }
+        });
+
+        // Session削除
+        async function revokeSession(sessionKey, userEmail) {
+            if (!confirm(`本当に ${userEmail} の Session を削除しますか？\nユーザーは強制的にログアウトされます。`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/sessions/${encodeURIComponent(sessionKey)}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Session削除に失敗しました');
+                }
+
+                showAlert('Session を削除しました', 'success');
+                loadSessions();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // 初期ロード
+        loadTokens();
+    </script>
+</body>
+</html>

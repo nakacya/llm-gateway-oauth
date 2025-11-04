@@ -364,31 +364,6 @@ http {
             content_by_lua_file /usr/local/openresty/lualib/custom/admin_manager.lua;
         }
 
-        # 🆕 Token/Session統合管理画面（管理者専用）
-        location = /token-session-manager {
-            default_type text/html;
-            alias /usr/local/openresty/nginx/html/token_session_manager.html;
-            access_by_lua_file /usr/local/openresty/lualib/custom/oauth_check.lua;
-        }
-
-        # 🆕 Token管理API（管理者専用）
-        location ~ ^/api/admin/tokens {
-            # OAuth2認証確認（X-Forwarded-Emailヘッダー取得用）
-            access_by_lua_file /usr/local/openresty/lualib/custom/oauth_check.lua;
-            
-            # token_admin.lua で実際の処理と管理者チェックを実施
-            content_by_lua_file /usr/local/openresty/lualib/custom/token_admin.lua;
-        }
-
-        # 🆕 Session管理API（管理者専用）
-        location ~ ^/api/admin/sessions {
-            # OAuth2認証確認（X-Forwarded-Emailヘッダー取得用）
-            access_by_lua_file /usr/local/openresty/lualib/custom/oauth_check.lua;
-            
-            # session_admin.lua で実際の処理と管理者チェックを実施
-            content_by_lua_file /usr/local/openresty/lualib/custom/session_admin.lua;
-        }
-
         location /token-manager {
             default_type text/html;
             alias /usr/local/openresty/nginx/html/token_manager.html;
