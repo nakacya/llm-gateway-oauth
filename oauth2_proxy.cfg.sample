@@ -45,7 +45,7 @@ cookie_httponly = true
 cookie_samesite = "lax"
 
 # Cookie有効期限（デフォルト: 168時間 = 7日間）
-cookie_expire = "168h"
+cookie_expire = "24h"
 cookie_refresh = "1h"
 
 # ユーザー情報をヘッダーで渡す設定
