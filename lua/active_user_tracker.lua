@@ -1,11 +1,11 @@
 -- active_user_tracker.lua
 -- OAuth2認証後にアクティブユーザー情報をRedisに記録
--- Version: 2025/11/05 v8 - CookieからRedisキーを直接抽出
--- 
+-- Version: 2025/11/06 v9 - 削除フラグ方式対応
+--
 -- 変更点:
---   - Cookieを2回Base64デコードしてRedisキーを直接抽出
---   - OAuth2 Proxyのv2形式に対応
---   - active_userキーのTTLは初回作成時のみ設定（以降リセットしない）
+--   - セッション削除後の再ログイン防止機能追加
+--   - active_user作成前に削除フラグをチェック
+--   - 削除フラグが存在する場合は401エラーを返す
 
 local redis = require "resty.redis"
 local cjson = require "cjson"
@@ -42,13 +42,13 @@ local function get_cookie_value(cookie_name)
     return cookie_value
 end
 
--- 🆕 CookieからRedisキーを直接抽出
+-- CookieからRedisキーを直接抽出
 local function extract_session_key_from_cookie(cookie_value)
     -- Cookie形式: base64(v2.base64(session_key).signature)|timestamp|hmac
-    
+
     -- Step 1: 最初の"|"より前の部分を抽出
     local session_token = cookie_value:match("^([^|]+)")
-    
+
     if not session_token then
         ngx.log(ngx.ERR, "Failed to extract session token from cookie")
         return nil
@@ -102,8 +102,8 @@ end
 -- メールアドレス取得（token_generator.luaと同じロジック）
 -- ============================================
 local headers = ngx.req.get_headers()
-local email = headers["X-Forwarded-Email"] or 
-              headers["x-forwarded-email"] or 
+local email = headers["X-Forwarded-Email"] or
+              headers["x-forwarded-email"] or
               ngx.var.http_x_forwarded_email or
               ngx.var.http_x_forwarded_user or
               ngx.var.arg___email
@@ -120,21 +120,58 @@ end
 
 ngx.log(ngx.INFO, "Tracking active user: ", email)
 
+-- ============================================
+-- 🆕 削除フラグのチェック
+-- ============================================
+local red, err = connect_redis()
+if not red then
+    ngx.log(ngx.ERR, "Failed to connect to Redis: ", err)
+    ngx.status = 500
+    ngx.say('{"status":"error","reason":"redis_connection_failed"}')
+    return
+end
+
+local deletion_flag_key = "active_user_deleted:" .. email
+local flag_exists = red:exists(deletion_flag_key)
+
+if flag_exists == 1 then
+    -- 削除フラグが存在する場合は401エラーを返す
+    ngx.log(ngx.WARN, "Deletion flag found for user: ", email, " - Blocking session creation")
+    
+    red:set_keepalive(10000, 100)
+    
+    ngx.status = 401
+    ngx.header["Content-Type"] = "application/json"
+    ngx.say(cjson.encode({
+        status = "blocked",
+        reason = "session_deleted_recently",
+        message = "Your session was deleted by an administrator. Please log in again.",
+        email = email
+    }))
+    return ngx.exit(401)
+end
+
+ngx.log(ngx.DEBUG, "No deletion flag found for user: ", email, " - Proceeding with tracking")
+
+-- ============================================
 -- OAuth2 Proxyのセッションキーを取得
+-- ============================================
 local session_cookie = get_cookie_value("_oauth2_proxy")
 
 if not session_cookie then
     ngx.log(ngx.WARN, "No OAuth2 session cookie found for user: ", email)
+    red:set_keepalive(10000, 100)
     ngx.status = 200
     ngx.say('{"status":"skipped","reason":"no_session_cookie"}')
     return
 end
 
--- 🆕 CookieからRedisキーを直接抽出
+-- CookieからRedisキーを直接抽出
 local session_key = extract_session_key_from_cookie(session_cookie)
 
 if not session_key then
     ngx.log(ngx.ERR, "Failed to extract session key from cookie")
+    red:set_keepalive(10000, 100)
     ngx.status = 500
     ngx.say('{"status":"error","reason":"extraction_failed"}')
     return
@@ -144,15 +181,6 @@ local active_user_key = "active_user:" .. email
 local metadata_key = "active_user_metadata:" .. email
 
 ngx.log(ngx.INFO, "Session key: ", session_key)
-
--- Redis接続
-local red, err = connect_redis()
-if not red then
-    ngx.log(ngx.ERR, "Failed to connect to Redis: ", err)
-    ngx.status = 500
-    ngx.say('{"status":"error","reason":"redis_connection_failed"}')
-    return
-end
 
 -- ============================================
 -- Active Userキーの管理（TTLは初回のみ設定）
@@ -165,25 +193,25 @@ local exists = red:exists(active_user_key)
 
 local created_at
 if exists == 0 then
-    -- 🆕 新規作成の場合
+    -- 新規作成の場合
     ngx.log(ngx.INFO, "Creating new active_user key for: ", email)
-    
+
     -- セッションキーをSetに追加
     red:sadd(active_user_key, session_key)
-    
+
     -- TTLを設定（初回のみ）
     red:expire(active_user_key, ttl_seconds)
-    
+
     created_at = current_time
 else
-    -- 🔄 既存のキーの場合
+    -- 既存のキーの場合
     ngx.log(ngx.INFO, "Updating existing active_user key for: ", email)
-    
+
     -- セッションキーをSetに追加（重複は自動的に無視される）
     red:sadd(active_user_key, session_key)
-    
-    -- ⚠️ TTLはリセットしない！
-    
+
+    -- TTLはリセットしない！
+
     -- メタデータから作成時刻を取得
     local metadata_json = red:get(metadata_key)
     if metadata_json and metadata_json ~= ngx.null then
@@ -227,8 +255,8 @@ end
 -- Redis接続をプールに返す
 red:set_keepalive(10000, 100)
 
-ngx.log(ngx.INFO, "Successfully tracked active user: ", email, 
-        " | created_at: ", created_at, 
+ngx.log(ngx.INFO, "Successfully tracked active user: ", email,
+        " | created_at: ", created_at,
         " | expires_at: ", expires_at,
         " | last_access: ", current_time,
         " | remaining_ttl: ", remaining_ttl, "s")
