@@ -15,10 +15,11 @@
 - **🔐 二重認証システム**
   - ブラウザアクセス用のOAuth2認証（Auth0）
   - API/CLIクライアント用のJWTトークン（最大90日間有効）
-  
+
 - **🛡️ セキュリティ強化**
   - ユーザー削除時の即時トークン無効化
   - Redisベースのトークンブラックリスト管理
+  - **再ログイン防止機能付きセッション削除**（NEW）
   - OAuth2セッションチェック（実装予定：毎日再認証）
 
 - **📊 完全な可観測性**
@@ -27,10 +28,12 @@
   - モデル/ユーザー別コスト追跡
   - ユーザー個別の予算制限設定が可能
 
-- **🔄 トークン管理**
+- **🔄 トークン・セッション管理**
   - Webベースのトークン管理UI
+  - **Webベースのセッション管理UI**（NEW）
   - ユーザーごとに複数トークン発行可能
   - カスタム有効期限設定
+  - **削除フラグシステムによる強制ログアウト**（NEW）
 
 - **🚀 本番環境対応**
   - Docker Composeによる簡単デプロイ
@@ -52,6 +55,7 @@
 │         OpenResty (ゲートウェイ)      │
 │  - JWT検証                           │
 │  - OAuth2セッションチェック           │
+│  - セッション削除フラグチェック (NEW) │
 │  - リクエストルーティング             │
 └──────┬───────────┬───────────────────┘
        │           │
@@ -59,7 +63,9 @@
        │                      ↓
        │                ┌──────────┐
        │                │  Redis   │
-       │                │(トークン)│
+       │                │(トークン  │
+       │                │ セッション│
+       │                │ フラグ)  │
        │                └──────────┘
        │
     ┌──┴─────────────────┐
@@ -188,6 +194,7 @@ curl -I http://{your-fqdn}
 
 **利用可能なUI**:
 - **Token Manager** (`/token-manager`): APIトークンの生成と管理
+- **Token & Session Manager** (`/token-session-manager`): トークンとセッションの統合管理（管理者のみ）
 - **Admin Manager** (`/admin-manager`): ユーザー管理用の管理パネル（管理者のみ）
 
 ### Token Manager UIでJWTトークンを生成
@@ -250,7 +257,7 @@ model_list:
     litellm_params:
       model: anthropic/claude-sonnet-4-20250514
       api_key: os.environ/ANTHROPIC_API_KEY
-  
+
   - model_name: claude-haiku-4-5
     litellm_params:
       model: anthropic/claude-haiku-4-5-20251001
@@ -259,7 +266,7 @@ model_list:
 
 ### JWTトークンの有効期限
 
-デフォルト: 30日（2,592,000秒）  
+デフォルト: 30日（2,592,000秒）
 最大: 90日（7,776,000秒）
 
 `lua/token_generator.lua`で変更:
@@ -387,6 +394,82 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 ---
 
+## 🛡️ セッション管理（NEW）
+
+### 強制ログアウト機能
+
+管理者は削除フラグシステムを使用して、ユーザーのセッションを強制的に削除し、自動再ログインを防止できます。
+
+#### 動作の仕組み
+
+1. **管理者がセッションを削除** Token & Session ManagerまたはAPI経由
+2. **削除フラグが作成される** Redisに60秒間有効なフラグを作成
+3. **ユーザーがアクセスを試みる**（60秒以内）
+4. **システムが削除フラグをチェック** セッション再作成をブロック
+5. **401エラーを返す** メッセージ: "セッションが削除されました"
+6. **ログイン画面にリダイレクト**
+7. **60秒後**、削除フラグが自動的に期限切れ
+8. **再ログイン可能** 通常通りログインできる
+
+#### 使用方法
+
+**方法1: Token & Session Manager UI（推奨）**
+
+1. `http://{your-fqdn}/token-session-manager` にアクセス（管理者のみ）
+2. **Sessions** タブに移動
+3. メールアドレスでユーザーを検索
+4. ユーザーのセッションの横にある **Delete** ボタンをクリック
+5. 削除を確認
+
+**期待されるレスポンス**:
+```json
+{
+  "message": "User sessions deleted successfully",
+  "user_email": "user@example.com",
+  "deleted_count": 1,
+  "deletion_flag_created": true,
+  "deletion_flag_ttl": 60
+}
+```
+
+**方法2: API**
+
+```bash
+# 内部ポート経由（OAuth2をバイパス）
+curl -X POST http://localhost:8080/api/admin/sessions/revoke-user \
+  -H "Content-Type: application/json" \
+  -H "X-Forwarded-Email: admin@example.com" \
+  -d '{"user_email":"user@example.com"}'
+```
+
+#### 技術詳細
+
+**実装**:
+- **session_admin.lua**: セッション削除時に削除フラグを作成
+- **active_user_tracker.lua**: active_user作成前に削除フラグをチェック
+- **削除フラグTTL**: 60秒（自動期限切れ）
+
+**動作**:
+- ✅ セッション削除後の自動再ログインを防止
+- ✅ ユーザーに明確なエラーメッセージを表示
+- ✅ 60秒後に自動期限切れで通常の再ログインが可能
+- ✅ 他のユーザーへの影響なし
+
+**ユーザー体験**:
+```
+管理者がセッションを削除
+  ↓
+ユーザーがページをリロード（60秒以内）
+  ↓
+401エラー: "セッションが管理者によって削除されました。再度ログインしてください。"
+  ↓
+ログイン画面にリダイレクト
+  ↓
+60秒後: 通常のログインが可能
+```
+
+---
+
 ## 📊 監視
 
 ### Langfuseダッシュボード
@@ -427,10 +510,19 @@ sudo docker compose logs -f openresty
 | `/api/token/info?token_id=xxx` | GET | トークン詳細取得 |
 | `/api/token/revoke` | POST | トークンを失効 |
 
+### セッション管理API（NEW）
+
+| エンドポイント | メソッド | 説明 |
+|--------------|---------|------|
+| `/api/admin/sessions` | GET | 全セッション一覧（管理者のみ） |
+| `/api/admin/sessions/revoke-user` | POST | ユーザーセッション削除（管理者のみ） |
+| `/api/admin/sessions/stats` | GET | セッション統計取得（管理者のみ） |
+
 ### ユーザー管理
 
 1. **ユーザー追加**: Auth0ダッシュボードで追加
 2. **ユーザー削除**: Auth0から削除 → 全トークンが24時間以内に無効化
+3. **強制ログアウト**: セッション削除機能を使用（即座に有効）
 
 ---
 
@@ -444,6 +536,7 @@ sudo docker compose logs -f openresty
 - ✅ `.env`ファイルのパーミッション設定: `chmod 600 .env`
 - ✅ Auth0でMFAを有効化
 - ✅ Langfuseで不審な活動を監視
+- ✅ 即座のユーザーロックアウトにはセッション削除機能を使用
 
 ### OAuth2セッション検証
 
@@ -451,6 +544,7 @@ sudo docker compose logs -f openresty
 - JWTトークンは全APIリクエストで検証されます
 - トークン失効はRedisブラックリスト経由で即座に有効化
 - OAuth2のメールアドレスが全LiteLLM APIリクエストに付与され、ユーザー毎の追跡が可能
+- **再ログイン防止機能付きセッション削除**（NEW）
 
 **実装予定の強化機能**:
 - OAuth2セッションが存在し有効である必要があります
@@ -483,6 +577,7 @@ sudo docker compose logs -f openresty
 | JWT検証失敗 | lua-resty-jwtを再インストール |
 | OAuth2セッション期限切れ | ブラウザで再認証 |
 | 接続拒否 | コンテナの状態を確認: `docker compose ps` |
+| セッション削除が機能しない | Redisで削除フラグを確認: `redis-cli GET "active_user_deleted:email"` |
 
 ### デバッグモード
 

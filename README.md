@@ -15,10 +15,11 @@
 - **🔐 Dual Authentication**
   - OAuth2 (Auth0) for browser-based access
   - JWT tokens for API/CLI clients (up to 90 days validity)
-  
+
 - **🛡️ Enhanced Security**
   - Immediate token revocation on user removal
   - Redis-based token blacklist management
+  - **Session deletion with re-login prevention** (NEW)
   - OAuth2 session check (planned: daily re-authentication)
 
 - **📊 Complete Observability**
@@ -27,10 +28,12 @@
   - Cost tracking by model/user
   - Individual user budget limits available
 
-- **🔄 Token Management**
+- **🔄 Token & Session Management**
   - Web-based token administration UI
+  - **Web-based session management UI** (NEW)
   - Multiple tokens per user
   - Custom expiration settings
+  - **Force logout with deletion flag system** (NEW)
 
 - **🚀 Production Ready**
   - Docker Compose deployment
@@ -52,6 +55,7 @@
 │         OpenResty (Gateway)          │
 │  - JWT Validation                    │
 │  - OAuth2 Session Check              │
+│  - Session Deletion Flag Check (NEW) │
 │  - Request Routing                   │
 └──────┬───────────┬───────────────────┘
        │           │
@@ -59,7 +63,9 @@
        │                      ↓
        │                ┌──────────┐
        │                │  Redis   │
-       │                │ (Tokens) │
+       │                │ (Tokens  │
+       │                │  Sessions│
+       │                │  Flags)  │
        │                └──────────┘
        │
     ┌──┴─────────────────┐
@@ -188,6 +194,7 @@ curl -I http://{your-fqdn}
 
 **Available UIs**:
 - **Token Manager** (`/token-manager`): Generate and manage your API tokens
+- **Token & Session Manager** (`/token-session-manager`): Unified token and session management (admin only)
 - **Admin Manager** (`/admin-manager`): Admin panel for user management (admin only)
 
 ### Generate JWT Token via Token Manager UI
@@ -250,7 +257,7 @@ model_list:
     litellm_params:
       model: anthropic/claude-sonnet-4-20250514
       api_key: os.environ/ANTHROPIC_API_KEY
-  
+
   - model_name: claude-haiku-4-5
     litellm_params:
       model: anthropic/claude-haiku-4-5-20251001
@@ -259,7 +266,7 @@ model_list:
 
 ### JWT Token Expiration
 
-Default: 30 days (2,592,000 seconds)  
+Default: 30 days (2,592,000 seconds)
 Maximum: 90 days (7,776,000 seconds)
 
 Modify in `lua/token_generator.lua`:
@@ -318,8 +325,8 @@ sudo docker compose restart
 - ⚠️ **All users share this single API key**
 - ⚠️ **Budget limit applies to total usage across ALL users**
 - ⚠️ **Multiple shared keys are not supported**
-- âœ… Individual user usage is tracked via OAuth2 email in logs
-- âœ… Per-user budget limits available (see below)
+- ✅ Individual user usage is tracked via OAuth2 email in logs
+- ✅ Per-user budget limits available (see below)
 
 ### Per-User Budget Limits (Optional)
 
@@ -388,6 +395,82 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 ---
 
+## 🛡️ Session Management (NEW)
+
+### Force Logout Feature
+
+Administrators can forcefully delete user sessions with automatic re-login prevention using a deletion flag system.
+
+#### How It Works
+
+1. **Admin deletes user session** via Token & Session Manager or API
+2. **Deletion flag is created** in Redis (valid for 60 seconds)
+3. **User attempts to access** within 60 seconds
+4. **System checks deletion flag** and blocks session recreation
+5. **401 error returned** with message: "Session has been revoked"
+6. **User is redirected** to login screen
+7. **After 60 seconds**, deletion flag expires automatically
+8. **User can log in again** normally
+
+#### Usage Methods
+
+**Method 1: Token & Session Manager UI (Recommended)**
+
+1. Access `http://{your-fqdn}/token-session-manager` (admin only)
+2. Navigate to **Sessions** tab
+3. Search for user by email
+4. Click **Delete** button next to the user's session
+5. Confirm deletion
+
+**Expected response**:
+```json
+{
+  "message": "User sessions deleted successfully",
+  "user_email": "user@example.com",
+  "deleted_count": 1,
+  "deletion_flag_created": true,
+  "deletion_flag_ttl": 60
+}
+```
+
+**Method 2: API**
+
+```bash
+# Via internal port (bypass OAuth2)
+curl -X POST http://localhost:8080/api/admin/sessions/revoke-user \
+  -H "Content-Type: application/json" \
+  -H "X-Forwarded-Email: admin@example.com" \
+  -d '{"user_email":"user@example.com"}'
+```
+
+#### Technical Details
+
+**Implementation**:
+- **session_admin.lua**: Creates deletion flag on session deletion
+- **active_user_tracker.lua**: Checks deletion flag before creating active_user
+- **Deletion flag TTL**: 60 seconds (automatic expiration)
+
+**Behavior**:
+- ✅ Prevents automatic re-login after session deletion
+- ✅ Returns clear error message to user
+- ✅ Auto-expires after 60 seconds for normal re-login
+- ✅ No impact on other users
+
+**User Experience**:
+```
+Session deleted by admin
+  ↓
+User reloads page (within 60 seconds)
+  ↓
+401 Error: "Your session has been deleted by an administrator. Please log in again."
+  ↓
+Redirected to login screen
+  ↓
+After 60 seconds: Normal login available
+```
+
+---
+
 ## 📊 Monitoring
 
 ### Langfuse Dashboard
@@ -428,10 +511,19 @@ sudo docker compose logs -f openresty
 | `/api/token/info?token_id=xxx` | GET | Get token details |
 | `/api/token/revoke` | POST | Revoke token |
 
+### Session Management API (NEW)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/sessions` | GET | List all sessions (admin only) |
+| `/api/admin/sessions/revoke-user` | POST | Delete user sessions (admin only) |
+| `/api/admin/sessions/stats` | GET | Get session statistics (admin only) |
+
 ### User Management
 
 1. **Add User**: Add to Auth0 dashboard
 2. **Remove User**: Delete from Auth0 → All tokens become invalid within 24 hours
+3. **Force Logout**: Use session deletion feature (immediate effect)
 
 ---
 
@@ -439,12 +531,13 @@ sudo docker compose logs -f openresty
 
 ### Best Practices
 
-- âœ… Store JWT tokens securely (environment variables or password managers)
-- âœ… Rotate tokens regularly
-- âœ… Use HTTPS in production
-- âœ… Set `.env` file permissions: `chmod 600 .env`
-- âœ… Enable MFA in Auth0
-- âœ… Monitor Langfuse for suspicious activity
+- ✅ Store JWT tokens securely (environment variables or password managers)
+- ✅ Rotate tokens regularly
+- ✅ Use HTTPS in production
+- ✅ Set `.env` file permissions: `chmod 600 .env`
+- ✅ Enable MFA in Auth0
+- ✅ Monitor Langfuse for suspicious activity
+- ✅ Use session deletion feature for immediate user lockout
 
 ### OAuth2 Session Validation
 
@@ -452,6 +545,7 @@ sudo docker compose logs -f openresty
 - JWT tokens are validated on every API request
 - Token revocation is immediate via Redis blacklist
 - OAuth2 email is attached to all LiteLLM API requests for per-user tracking
+- **Session deletion with re-login prevention** (NEW)
 
 **Planned enhancements**:
 - OAuth2 session must exist and be valid
@@ -484,6 +578,7 @@ sudo docker compose logs -f openresty
 | JWT verification failed | Reinstall lua-resty-jwt |
 | OAuth2 session expired | Re-authenticate in browser |
 | Connection refused | Check container status: `docker compose ps` |
+| Session deletion not working | Check deletion flag in Redis: `redis-cli GET "active_user_deleted:email"` |
 
 ### Debug Mode
 
@@ -532,4 +627,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Built with â¤ï¸ for secure team LLM collaboration**# llm-gateway-oauth
+**Built with ❤️ for secure team LLM collaboration**
