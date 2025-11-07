@@ -115,6 +115,10 @@
             font-weight: bold;
         }
 
+        .stat-box.banned {
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+        }
+
         .search-box {
             margin-bottom: 20px;
         }
@@ -154,6 +158,15 @@
             background: #f7fafc;
         }
 
+        tr.banned-row {
+            background: #fff5f5 !important;
+            border-left: 4px solid #fc8181;
+        }
+
+        tr.banned-row:hover {
+            background: #fed7d7 !important;
+        }
+
         .badge {
             display: inline-block;
             padding: 4px 12px;
@@ -177,6 +190,17 @@
             color: #2d3748;
         }
 
+        .badge-banned {
+            background: #feb2b2;
+            color: #742a2a;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
         .btn {
             padding: 8px 16px;
             border: none;
@@ -196,6 +220,15 @@
             background: #e53e3e;
         }
 
+        .btn-ban {
+            background: #c53030;
+            color: white;
+        }
+
+        .btn-ban:hover {
+            background: #9b2c2c;
+        }
+
         .btn-primary {
             background: #667eea;
             color: white;
@@ -211,6 +244,7 @@
             margin-bottom: 20px;
         }
 
+
         .alert-success {
             background: #c6f6d5;
             color: #22543d;
@@ -219,6 +253,11 @@
         .alert-error {
             background: #fed7d7;
             color: #742a2a;
+        }
+
+        .alert-warning {
+            background: #feebc8;
+            color: #744210;
         }
 
         .loading {
@@ -250,24 +289,87 @@
             margin-bottom: 20px;
             opacity: 0.3;
         }
+
+        .time-info {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .ban-warning {
+            background: #fff5f5;
+            border-left: 4px solid #fc8181;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .ban-warning h3 {
+            color: #c53030;
+            margin-bottom: 10px;
+        }
+
+        .ban-warning p {
+            color: #742a2a;
+            line-height: 1.6;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🔐 Token & Session 管理</h1>
-            <p>管理者専用 - JWT Token と OAuth2 Session の統合管理（Auth0完全ログアウト対応）</p>
+            <p>管理者専用 - JWT Token と OAuth2 Session の統合管理(即時BAN機能付き)</p>
         </div>
 
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('sessions')">🔐 OAuth2 Sessions</button>
+            <button class="tab active" onclick="switchTab('active-users')">👥 Active Users</button>
+            <button class="tab" onclick="switchTab('sessions')">🔐 OAuth2 Sessions</button>
             <button class="tab" onclick="switchTab('tokens')">🎫 JWT Tokens</button>
         </div>
 
         <div id="alert-container"></div>
 
+        <!-- Active Usersタブ -->
+        <div id="active-users-tab" class="tab-content active">
+            <div class="ban-warning">
+                <h3>⚠️ 即時BAN機能について</h3>
+                <p>
+                    <strong>BAN期間:</strong> 7日間(604800秒)<br>
+                    <strong>対象:</strong> メールアドレスに紐づく全てのセッションCookie<br>
+                    <strong>自動解除:</strong> OAuth再認証により正規ユーザーとして確認されれば自動解除<br>
+                    <strong>用途:</strong> 退職・部署異動・緊急時の強制ログアウト
+                </p>
+            </div>
+
+            <div class="card">
+                <h2>📊 アクティブユーザー統計</h2>
+                <div class="stats" id="active-user-stats">
+                    <div class="stat-box">
+                        <h3>Total Active Users</h3>
+                        <p id="total-active-users">-</p>
+                    </div>
+                    <div class="stat-box banned">
+                        <h3>Banned Users</h3>
+                        <p id="banned-users">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🔍 ユーザー検索 & 即時BAN</h2>
+                <div class="search-box">
+                    <input type="text" id="active-user-search" placeholder="🔍 メールアドレスで検索...">
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="loadActiveUsers()">🔄 更新</button>
+                    <button class="btn btn-danger" onclick="cleanupExpiredUsers()">🗑️ 期限切れユーザーを削除</button>
+                </div>
+                <div id="active-user-list"></div>
+            </div>
+        </div>
+
         <!-- Sessionタブ -->
-        <div id="sessions-tab" class="tab-content active">
+        <div id="sessions-tab" class="tab-content">
             <div class="card">
                 <h2>📊 セッション統計</h2>
                 <div class="stats" id="session-stats">
@@ -331,12 +433,13 @@
         const API_BASE = window.location.origin;
         let allTokens = [];
         let allSessions = [];
+        let allActiveUsers = [];
 
         // タブ切り替え
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             event.target.classList.add('active');
-            
+
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById(`${tabName}-tab`).classList.add('active');
 
@@ -344,6 +447,8 @@
                 loadTokens();
             } else if (tabName === 'sessions') {
                 loadSessions();
+            } else if (tabName === 'active-users') {
+                loadActiveUsers();
             }
         }
 
@@ -356,6 +461,216 @@
             alertContainer.appendChild(alert);
 
             setTimeout(() => alert.remove(), 5000);
+        }
+
+        // 時間フォーマット関数
+        function formatTime(timestamp) {
+            if (!timestamp || timestamp === 0) return '-';
+            return new Date(timestamp * 1000).toLocaleString('ja-JP');
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 0) return 'Expired';
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+
+            if (days > 0) return `${days}日 ${hours}時間`;
+            if (hours > 0) return `${hours}時間 ${mins}分`;
+            return `${mins}分`;
+        }
+
+        // 🆕 Active User一覧を読み込み
+        async function loadActiveUsers() {
+            const activeUserList = document.getElementById('active-user-list');
+            activeUserList.innerHTML = '<div class="loading">読み込み中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/sessions/active-users`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Active User一覧の取得に失敗しました');
+                }
+
+                const data = await response.json();
+                allActiveUsers = Array.isArray(data.active_users) ? data.active_users : [];
+
+                // ✅ 統計を更新（修正版: APIレスポンスから直接取得）
+                document.getElementById('total-active-users').textContent = data.total || 0;
+                const bannedCount = data.banned_count || 0;  // ★ 修正: APIレスポンスから取得
+                document.getElementById('banned-users').textContent = bannedCount;
+
+                renderActiveUsers(allActiveUsers);
+
+            } catch (error) {
+                console.error('Active User load error:', error);
+                activeUserList.innerHTML = `<div class="empty-state">${error.message}</div>`;
+            }
+        }
+
+        // 🆕 Active User一覧を表示(視覚的強化版)
+        function renderActiveUsers(users) {
+            const activeUserList = document.getElementById('active-user-list');
+
+            if (!Array.isArray(users) || users.length === 0) {
+                activeUserList.innerHTML = '<div class="empty-state">アクティブユーザーがいません</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User Email</th>
+                            <th>Session Count</th>
+                            <th>Last Access</th>
+                            <th>Expires</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${users.map(user => `
+                            <tr class="${user.is_banned ? 'banned-row' : ''}">
+                                <td><strong>${user.email}</strong></td>
+                                <td>${user.session_count}</td>
+                                <td>
+                                    ${formatTime(user.last_access)}<br>
+                                    <span class="time-info">${formatDuration(user.ttl_seconds)} 残り</span>
+                                </td>
+                                <td>${formatTime(user.expires_at)}</td>
+                                <td>
+                                    ${user.is_banned ?
+                                        `<span class="badge badge-banned">🔥 BANNED<br>${formatDuration(user.ban_remaining_seconds)} 残り</span>` :
+                                        `<span class="badge badge-active">✅ Active</span>`
+                                    }
+                                </td>
+                                <td>
+                                    ${!user.is_banned ? `
+                                        <button class="btn btn-ban" onclick="banUser('${user.email}')">
+                                            🔥 即時BAN (7日間)
+                                        </button>
+                                    ` : `
+                                        <button class="btn btn-primary" onclick="unbanUser('${user.email}')">
+                                            ✅ BAN解除
+                                        </button>
+                                    `}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            activeUserList.innerHTML = html;
+        }
+
+        // 🆕 Active User検索
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('active-user-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    const filtered = Array.isArray(allActiveUsers) ? allActiveUsers.filter(user =>
+                        user.email.toLowerCase().includes(query)
+                    ) : [];
+                    renderActiveUsers(filtered);
+                });
+            }
+        });
+
+        // 🆕 ユーザーをBAN
+        async function banUser(userEmail) {
+            if (!confirm(`⚠️ 本当に ${userEmail} を即時BANしますか?\n\n` +
+                         `・BAN期間: 7日間\n` +
+                         `・対象: 全てのセッションCookie\n` +
+                         `・ユーザーは強制的にログアウトされます\n` +
+                         `・OAuth再認証で自動解除されます`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/sessions/revoke-user`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ user_email: userEmail })
+                });
+
+                if (!response.ok) {
+                    throw new Error('ユーザーのBAN処理に失敗しました');
+                }
+
+                const result = await response.json();
+                showAlert(`✅ ${userEmail} を即時BANしました(7日間)\n削除されたセッション数: ${result.deleted_count}`, 'success');
+                loadActiveUsers();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // 🆕 ユーザーのBANを解除
+        async function unbanUser(userEmail) {
+            if (!confirm(`${userEmail} のBANを解除しますか?\n\nユーザーは即座にアクセス可能になります。`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/sessions/unban/${encodeURIComponent(userEmail)}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'BAN解除に失敗しました');
+                }
+
+                const result = await response.json();
+                showAlert(`✅ ${userEmail} のBANを解除しました`, 'success');
+                loadActiveUsers();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // 🆕 期限切れユーザーをクリーンアップ
+        async function cleanupExpiredUsers() {
+            if (!confirm('⚠️ 期限切れのアクティブユーザー情報を削除しますか?\n\n' +
+                         'この操作は元に戻せません。\n' +
+                         '7日以上経過したユーザー情報のみが削除されます。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/sessions/cleanup-expired`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('クリーンアップに失敗しました');
+                }
+
+                const result = await response.json();
+
+                if (result.cleaned_count > 0) {
+                    showAlert(`✅ ${result.cleaned_count}件の期限切れユーザー情報を削除しました`, 'success');
+                } else {
+                    showAlert('期限切れのユーザー情報はありませんでした', 'warning');
+                }
+
+                loadActiveUsers();
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
         }
 
         // Token一覧を読み込み
@@ -421,7 +736,7 @@
                                 <td>${new Date(token.expires_at * 1000).toLocaleString('ja-JP')}</td>
                                 <td>
                                     <span class="badge badge-${token.status}">
-                                        ${token.status === 'active' ? 'アクティブ' : 
+                                        ${token.status === 'active' ? 'アクティブ' :
                                           token.status === 'expired' ? '期限切れ' : '失効済み'}
                                     </span>
                                 </td>
@@ -448,7 +763,7 @@
             const searchInput = document.getElementById('token-search');
             searchInput.addEventListener('input', (e) => {
                 const query = e.target.value.toLowerCase();
-                const filtered = allTokens.filter(token => 
+                const filtered = allTokens.filter(token =>
                     token.user_email.toLowerCase().includes(query) ||
                     token.token_name.toLowerCase().includes(query)
                 );
@@ -495,7 +810,7 @@
                 }
 
                 const data = await response.json();
-                
+
                 // sessions が配列であることを確認
                 allSessions = Array.isArray(data.sessions) ? data.sessions : [];
 
@@ -558,7 +873,7 @@
             if (searchInput) {
                 searchInput.addEventListener('input', (e) => {
                     const query = e.target.value.toLowerCase();
-                    const filtered = Array.isArray(allSessions) ? allSessions.filter(session => 
+                    const filtered = Array.isArray(allSessions) ? allSessions.filter(session =>
                         (session.email || '').toLowerCase().includes(query)
                     ) : [];
                     renderSessions(filtered);
@@ -591,7 +906,7 @@
         }
 
         // 初期ロード
-        loadSessions();
+        loadActiveUsers();
     </script>
 </body>
 </html>

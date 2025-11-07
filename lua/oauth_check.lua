@@ -2,6 +2,8 @@
 -- OAuth認証チェック + Redisセッション確認
 -- Version: 2025/11/05 v2 - セッション削除後の即座ログアウト対応
 
+ngx.log(ngx.ERR, "===== oauth_check.lua START ===== METHOD:", ngx.var.request_method, " URI:", ngx.var.uri)
+
 local cjson = require "cjson"
 local redis = require "resty.redis"
 

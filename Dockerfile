@@ -1,7 +1,7 @@
 FROM openresty/openresty:alpine
 
 # 必要なツールをインストール
-RUN apk add --no-cache git
+RUN apk add --no-cache git tcpdump
 
 # 作業ディレクトリ
 WORKDIR /tmp
