@@ -1,7 +1,7 @@
 -- session_admin.lua
 -- 管理者用OAuth2セッション管理API
 -- セッション一覧・削除（強制ログアウト）
--- Version: 2025/11/08 v4.1 - Banned Users カウント修正（Redisから直接取得）
+-- Version: 2025/11/08 v4.4 - URLデコード処理修正（パーセントエンコーディングのみ）
 
 local redis = require "resty.redis"
 local cjson = require "cjson"
@@ -109,72 +109,87 @@ end
 local method = ngx.req.get_method()
 local uri = ngx.var.uri
 
--- 🆕 GET /api/admin/sessions/active-users - Active User一覧
+-- 🆕 GET /api/admin/sessions/active-users - Active User一覧（BANユーザーも含む）
 if method == "GET" and uri == "/api/admin/sessions/active-users" then
-    -- active_user:* キーを検索
+    local current_time = ngx.time()
+    local active_users = {}
+    local user_map = {}  -- メールアドレスをキーにした重複排除用
+
+    -- 1️⃣ アクティブユーザー（active_user:*）を取得
     local active_user_keys, err = red:keys("active_user:*")
 
-    if not active_user_keys or type(active_user_keys) ~= "table" then
-        -- ★ Banned ユーザーのカウント（Redisから直接取得）
-        local banned_keys, err = red:keys("active_user_deleted:*")
-        local banned_count = 0
-        if banned_keys and type(banned_keys) == "table" then
-            banned_count = #banned_keys
+    if active_user_keys and type(active_user_keys) == "table" then
+        for _, key in ipairs(active_user_keys) do
+            local email = key:match("^active_user:(.+)$")
+
+            if email then
+                -- メタデータを取得
+                local metadata_key = "active_user_metadata:" .. email
+                local metadata_json = red:get(metadata_key)
+
+                local metadata = {}
+                if metadata_json and metadata_json ~= ngx.null then
+                    local ok, parsed = pcall(cjson.decode, metadata_json)
+                    if ok then
+                        metadata = parsed
+                    end
+                end
+
+                -- セッション数を取得
+                local session_count = red:scard(key)
+
+                -- TTLを取得
+                local ttl = red:ttl(key)
+
+                user_map[email] = {
+                    email = email,
+                    session_count = tonumber(session_count) or 0,
+                    created_at = metadata.created_at or 0,
+                    last_access = metadata.last_access or 0,
+                    expires_at = metadata.expires_at or 0,
+                    ttl_seconds = tonumber(ttl) or -1,
+                    is_banned = false,
+                    ban_remaining_seconds = 0
+                }
+            end
         end
-        
-        red:set_keepalive(10000, 100)
-        send_response(200, {
-            active_users = {},
-            total = 0,
-            banned_count = banned_count
-        })
     end
 
-    local active_users = {}
-    local current_time = ngx.time()
+    -- 2️⃣ BANされたユーザー（active_user_deleted:*）を取得
+    local banned_keys, err = red:keys("active_user_deleted:*")
 
-    for _, key in ipairs(active_user_keys) do
-        -- メールアドレスを抽出
-        local email = key:match("^active_user:(.+)$")
+    if banned_keys and type(banned_keys) == "table" then
+        for _, key in ipairs(banned_keys) do
+            local email = key:match("^active_user_deleted:(.+)$")
 
-        if email then
-            -- メタデータを取得
-            local metadata_key = "active_user_metadata:" .. email
-            local metadata_json = red:get(metadata_key)
+            if email then
+                local ban_ttl = red:ttl(key)
+                local deleted_timestamp = red:get(key)
 
-            local metadata = {}
-            if metadata_json and metadata_json ~= ngx.null then
-                local ok, parsed = pcall(cjson.decode, metadata_json)
-                if ok then
-                    metadata = parsed
+                -- 既にアクティブユーザーとして存在する場合は上書き（is_banned=true）
+                if user_map[email] then
+                    user_map[email].is_banned = true
+                    user_map[email].ban_remaining_seconds = tonumber(ban_ttl) or 0
+                else
+                    -- アクティブユーザーではない（完全にBANされている）
+                    user_map[email] = {
+                        email = email,
+                        session_count = 0,
+                        created_at = tonumber(deleted_timestamp) or 0,
+                        last_access = tonumber(deleted_timestamp) or 0,
+                        expires_at = 0,
+                        ttl_seconds = 0,
+                        is_banned = true,
+                        ban_remaining_seconds = tonumber(ban_ttl) or 0
+                    }
                 end
             end
-
-            -- セッション数を取得
-            local session_count = red:scard(key)
-
-            -- TTLを取得
-            local ttl = red:ttl(key)
-
-            -- 削除フラグの確認
-            local deletion_flag_key = "active_user_deleted:" .. email
-            local is_banned = red:exists(deletion_flag_key) == 1
-            local ban_ttl = 0
-            if is_banned then
-                ban_ttl = red:ttl(deletion_flag_key)
-            end
-
-            table.insert(active_users, {
-                email = email,
-                session_count = tonumber(session_count) or 0,
-                created_at = metadata.created_at or 0,
-                last_access = metadata.last_access or 0,
-                expires_at = metadata.expires_at or 0,
-                ttl_seconds = tonumber(ttl) or -1,
-                is_banned = is_banned,
-                ban_remaining_seconds = tonumber(ban_ttl) or 0
-            })
         end
+    end
+
+    -- 3️⃣ ユーザーマップを配列に変換
+    for email, user_data in pairs(user_map) do
+        table.insert(active_users, user_data)
     end
 
     -- 最終アクセス時刻でソート（新しい順）
@@ -182,11 +197,12 @@ if method == "GET" and uri == "/api/admin/sessions/active-users" then
         return (a.last_access or 0) > (b.last_access or 0)
     end)
 
-    -- ★ Banned ユーザーのカウント（修正版：Redisから直接取得）
-    local banned_keys, err = red:keys("active_user_deleted:*")
+    -- BANユーザー数をカウント
     local banned_count = 0
-    if banned_keys and type(banned_keys) == "table" then
-        banned_count = #banned_keys
+    for _, user in ipairs(active_users) do
+        if user.is_banned then
+            banned_count = banned_count + 1
+        end
     end
 
     red:set_keepalive(10000, 100)
@@ -194,7 +210,7 @@ if method == "GET" and uri == "/api/admin/sessions/active-users" then
     send_response(200, {
         active_users = active_users,
         total = #active_users,
-        banned_count = banned_count,  -- ★ 修正：Redisから直接カウント
+        banned_count = banned_count,
         current_time = current_time
     })
 
@@ -251,6 +267,45 @@ elseif method == "GET" and uri == "/api/admin/sessions" then
         patterns_searched = session_patterns
     })
 
+-- 🆕 DELETE /api/admin/sessions/unban/{email} - BAN解除（誤BAN対応）
+-- ★ 注意: より具体的なパターンを先にチェック
+elseif method == "DELETE" and uri:match("^/api/admin/sessions/unban/") then
+    local user_email = uri:match("^/api/admin/sessions/unban/(.+)")
+
+    if not user_email then
+        red:set_keepalive(10000, 100)
+        send_response(400, {error = "User email required"})
+    end
+
+    -- URLデコード（パーセントエンコーディングのみ）
+    -- ngx.unescape_uri()は+をスペースに変換するため、手動でデコード
+    user_email = user_email:gsub("%%(%x%x)", function(hex)
+        return string.char(tonumber(hex, 16))
+    end)
+
+    -- 削除フラグを削除
+    local deletion_flag_key = "active_user_deleted:" .. user_email
+    local result = red:del(deletion_flag_key)
+
+    if result == 0 then
+        red:set_keepalive(10000, 100)
+        send_response(404, {
+            error = "Ban flag not found",
+            user_email = user_email,
+            message = "User is not currently banned"
+        })
+    end
+
+    red:set_keepalive(10000, 100)
+
+    ngx.log(ngx.INFO, "Ban flag removed for: ", user_email, " by admin: ", email_header)
+
+    send_response(200, {
+        message = "Ban removed successfully",
+        user_email = user_email,
+        unbanned_by = email_header
+    })
+
 -- DELETE /api/admin/sessions/{session_key} - セッション削除（強制ログアウト）
 elseif method == "DELETE" and uri:match("^/api/admin/sessions/") then
     local session_key = uri:match("^/api/admin/sessions/(.+)")
@@ -260,8 +315,10 @@ elseif method == "DELETE" and uri:match("^/api/admin/sessions/") then
         send_response(400, {error = "Session key required"})
     end
 
-    -- URLデコード
-    session_key = ngx.unescape_uri(session_key)
+    -- URLデコード（パーセントエンコーディングのみ）
+    session_key = session_key:gsub("%%(%x%x)", function(hex)
+        return string.char(tonumber(hex, 16))
+    end)
 
     -- セッションを削除
     local result, err = red:del(session_key)

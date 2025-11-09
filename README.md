@@ -19,7 +19,7 @@
 - **🛡️ Enhanced Security**
   - Immediate token revocation on user removal
   - Redis-based token blacklist management
-  - **Session deletion with re-login prevention** (NEW)
+  - **Session deletion with force logout** (NEW)
   - OAuth2 session check (planned: daily re-authentication)
 
 - **📊 Complete Observability**
@@ -29,11 +29,11 @@
   - Individual user budget limits available
 
 - **🔄 Token & Session Management**
-  - Web-based token administration UI
-  - **Web-based session management UI** (NEW)
+  - **Unified web-based management UI** (NEW)
   - Multiple tokens per user
   - Custom expiration settings
-  - **Force logout with deletion flag system** (NEW)
+  - **Real-time session monitoring** (NEW)
+  - **Force logout functionality** (NEW)
 
 - **🚀 Production Ready**
   - Docker Compose deployment
@@ -55,7 +55,6 @@
 │         OpenResty (Gateway)          │
 │  - JWT Validation                    │
 │  - OAuth2 Session Check              │
-│  - Session Deletion Flag Check (NEW) │
 │  - Request Routing                   │
 └──────┬───────────┬───────────────────┘
        │           │
@@ -64,8 +63,7 @@
        │                ┌──────────┐
        │                │  Redis   │
        │                │ (Tokens  │
-       │                │  Sessions│
-       │                │  Flags)  │
+       │                │  Sessions)│
        │                └──────────┘
        │
     ┌──┴─────────────────┐
@@ -189,13 +187,31 @@ curl -I http://{your-fqdn}
 
 1. Navigate to `http://{your-fqdn}`
 2. Log in via Auth0
-3. Access Token Manager at `http://{your-fqdn}/token-manager`
-4. Generate and manage JWT tokens through the web UI
+3. Access Token & Session Manager at `http://{your-fqdn}/token-session-manager`
+4. Manage JWT tokens and sessions through the unified web UI
 
 **Available UIs**:
 - **Token Manager** (`/token-manager`): Generate and manage your API tokens
-- **Token & Session Manager** (`/token-session-manager`): Unified token and session management (admin only)
+- **Token & Session Manager** (`/token-session-manager`): Unified token and session management with real-time monitoring (admin only)
 - **Admin Manager** (`/admin-manager`): Admin panel for user management (admin only)
+
+### Token & Session Manager Features
+
+The unified management interface provides:
+
+**Tokens Tab**:
+- View all JWT tokens across users
+- Token statistics (total, active, expired, revoked)
+- Search by email or token name
+- Revoke active tokens
+- Real-time status updates
+
+**Sessions Tab**:
+- View all active OAuth2 sessions
+- Session statistics (total sessions, unique users)
+- Search by email
+- Force logout users by deleting sessions
+- Monitor session TTL (Time To Live)
 
 ### Generate JWT Token via Token Manager UI
 
@@ -399,74 +415,107 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 ### Force Logout Feature
 
-Administrators can forcefully delete user sessions with automatic re-login prevention using a deletion flag system.
+Administrators can forcefully delete user sessions to immediately revoke access. The system provides both UI-based and API-based management.
 
 #### How It Works
 
-1. **Admin deletes user session** via Token & Session Manager or API
-2. **Deletion flag is created** in Redis (valid for 60 seconds)
-3. **User attempts to access** within 60 seconds
-4. **System checks deletion flag** and blocks session recreation
-5. **401 error returned** with message: "Session has been revoked"
-6. **User is redirected** to login screen
-7. **After 60 seconds**, deletion flag expires automatically
-8. **User can log in again** normally
+1. **Admin deletes user session** via Token & Session Manager UI or API
+2. **Session is removed** from Redis immediately
+3. **User's next request fails** with 401 Unauthorized
+4. **User is redirected** to login screen automatically
+5. **User must re-authenticate** to regain access
 
 #### Usage Methods
 
 **Method 1: Token & Session Manager UI (Recommended)**
 
 1. Access `http://{your-fqdn}/token-session-manager` (admin only)
-2. Navigate to **Sessions** tab
-3. Search for user by email
+2. Click on **Sessions** tab
+3. Search for user by email address
 4. Click **Delete** button next to the user's session
-5. Confirm deletion
+5. Confirm deletion in the dialog
+
+**Expected UI behavior**:
+- Success message displayed: "Session を削除しました"
+- Session list automatically refreshes
+- Deleted session no longer appears in the list
+
+**Method 2: Delete Single Session (API)**
+
+```bash
+# Get session key from UI or API, then delete
+curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
+
+**Expected response**:
+```json
+{
+  "message": "Session deleted successfully",
+  "session_key": "_oauth2_proxy-abc123...",
+  "deleted_by": "admin@example.com"
+}
+```
+
+**Method 3: Delete All User Sessions (API)**
+
+```bash
+# Delete all sessions for a specific user
+curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_email": "user@example.com"
+  }'
+```
 
 **Expected response**:
 ```json
 {
   "message": "User sessions deleted successfully",
   "user_email": "user@example.com",
-  "deleted_count": 1,
-  "deletion_flag_created": true,
-  "deletion_flag_ttl": 60
+  "deleted_count": 2,
+  "deleted_by": "admin@example.com"
 }
-```
-
-**Method 2: API**
-
-```bash
-# Via internal port (bypass OAuth2)
-curl -X POST http://localhost:8080/api/admin/sessions/revoke-user \
-  -H "Content-Type: application/json" \
-  -H "X-Forwarded-Email: admin@example.com" \
-  -d '{"user_email":"user@example.com"}'
 ```
 
 #### Technical Details
 
 **Implementation**:
-- **session_admin.lua**: Creates deletion flag on session deletion
-- **active_user_tracker.lua**: Checks deletion flag before creating active_user
-- **Deletion flag TTL**: 60 seconds (automatic expiration)
+- **session_admin.lua**: Handles all session management API endpoints
+- **OAuth2 Proxy**: Stores sessions in Redis with key pattern `_oauth2_proxy-*`
+- **Session data**: Contains user email, creation time, expiration, and auth metadata
+
+**Session Key Patterns Searched**:
+```
+_oauth2_proxy-*      # Primary pattern (hyphen format)
+_oauth2_proxy_*      # Alternate pattern (underscore format)
+_oauth2_proxy:*      # Alternate pattern (colon format)
+oauth2-*             # Legacy pattern
+oauth2_*             # Legacy pattern
+session:*            # Generic pattern
+```
 
 **Behavior**:
-- ✅ Prevents automatic re-login after session deletion
-- ✅ Returns clear error message to user
-- ✅ Auto-expires after 60 seconds for normal re-login
-- ✅ No impact on other users
+- ✅ Immediate session deletion from Redis
+- ✅ User automatically logged out on next request
+- ✅ Multiple sessions per user supported
+- ✅ Admin audit logging included
+- ✅ No impact on other users' sessions
 
 **User Experience**:
 ```
 Session deleted by admin
   ↓
-User reloads page (within 60 seconds)
+User continues browsing
   ↓
-401 Error: "Your session has been deleted by an administrator. Please log in again."
+Next request to any protected endpoint
   ↓
-Redirected to login screen
+401 Unauthorized: Cookie not found or invalid
   ↓
-After 60 seconds: Normal login available
+Automatic redirect to Auth0 login screen
+  ↓
+User must log in again to access system
 ```
 
 ---
@@ -513,17 +562,45 @@ sudo docker compose logs -f openresty
 
 ### Session Management API (NEW)
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/admin/sessions` | GET | List all sessions (admin only) |
-| `/api/admin/sessions/revoke-user` | POST | Delete user sessions (admin only) |
-| `/api/admin/sessions/stats` | GET | Get session statistics (admin only) |
+| Endpoint | Method | Description | Auth Required |
+|----------|--------|-------------|---------------|
+| `/api/admin/sessions` | GET | List all active sessions | Admin only |
+| `/api/admin/sessions/{session_key}` | DELETE | Delete specific session | Admin only |
+| `/api/admin/sessions/revoke-user` | POST | Delete all sessions for a user | Admin only |
+| `/api/admin/sessions/stats` | GET | Get session statistics | Admin only |
+
+#### Session API Examples
+
+**List All Sessions**:
+```bash
+curl http://{your-fqdn}/api/admin/sessions \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
+
+**Get Session Statistics**:
+```bash
+curl http://{your-fqdn}/api/admin/sessions/stats \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
+
+Response:
+```json
+{
+  "total_sessions": 15,
+  "unique_users": 8,
+  "user_sessions": {
+    "user1@example.com": 2,
+    "user2@example.com": 1,
+    "admin@example.com": 3
+  }
+}
+```
 
 ### User Management
 
 1. **Add User**: Add to Auth0 dashboard
 2. **Remove User**: Delete from Auth0 → All tokens become invalid within 24 hours
-3. **Force Logout**: Use session deletion feature (immediate effect)
+3. **Force Logout**: Use session deletion feature via UI or API (immediate effect)
 
 ---
 
@@ -538,6 +615,7 @@ sudo docker compose logs -f openresty
 - ✅ Enable MFA in Auth0
 - ✅ Monitor Langfuse for suspicious activity
 - ✅ Use session deletion feature for immediate user lockout
+- ✅ Regularly audit active sessions via Token & Session Manager
 
 ### OAuth2 Session Validation
 
@@ -545,7 +623,8 @@ sudo docker compose logs -f openresty
 - JWT tokens are validated on every API request
 - Token revocation is immediate via Redis blacklist
 - OAuth2 email is attached to all LiteLLM API requests for per-user tracking
-- **Session deletion with re-login prevention** (NEW)
+- **Session deletion with force logout** (NEW)
+- **Real-time session monitoring** (NEW)
 
 **Planned enhancements**:
 - OAuth2 session must exist and be valid
@@ -578,7 +657,8 @@ sudo docker compose logs -f openresty
 | JWT verification failed | Reinstall lua-resty-jwt |
 | OAuth2 session expired | Re-authenticate in browser |
 | Connection refused | Check container status: `docker compose ps` |
-| Session deletion not working | Check deletion flag in Redis: `redis-cli GET "active_user_deleted:email"` |
+| Session deletion not working | Verify Redis connection and session key format |
+| Can't see sessions in UI | Ensure you're logged in as admin user |
 
 ### Debug Mode
 

@@ -1,6 +1,6 @@
 -- oauth_check.lua
--- OAuth認証チェック + Redisセッション確認
--- Version: 2025/11/05 v2 - セッション削除後の即座ログアウト対応
+-- OAuth認証チェック + Redisセッション確認 + BAN状態チェック
+-- Version: 2025/11/08 v3 - BAN状態チェック追加
 
 ngx.log(ngx.ERR, "===== oauth_check.lua START ===== METHOD:", ngx.var.request_method, " URI:", ngx.var.uri)
 
@@ -51,18 +51,42 @@ if not user_email or user_email == "" then
     return ngx.exit(ngx.HTTP_UNAUTHORIZED)
 end
 
--- 🆕 Redisでアクティブセッションを確認
+-- 🆕 Redisでアクティブセッション & BAN状態を確認
 local red, err = connect_redis()
 if red then
+    -- 🔥 BAN状態チェック（最優先）
+    local deletion_flag_key = "active_user_deleted:" .. user_email
+    local is_banned = red:exists(deletion_flag_key)
+
+    if is_banned == 1 then
+        -- ユーザーがBANされている
+        local ban_ttl = red:ttl(deletion_flag_key)
+        
+        ngx.log(ngx.WARN, "BANNED user attempted access: ", user_email, " (TTL: ", ban_ttl, "s)")
+
+        red:set_keepalive(10000, 100)
+
+        ngx.status = ngx.HTTP_FORBIDDEN
+        ngx.header.content_type = "application/json"
+        ngx.say(cjson.encode({
+            error = "Access denied",
+            message = "Your account has been temporarily suspended. Please contact the administrator.",
+            banned_until_seconds = ban_ttl,
+            user_email = user_email
+        }))
+        return ngx.exit(ngx.HTTP_FORBIDDEN)
+    end
+
+    -- アクティブセッション確認
     local active_user_key = "active_user:" .. user_email
     local exists = red:exists(active_user_key)
 
     if exists == 0 then
         -- active_userキーが存在しない = セッションが削除された
         ngx.log(ngx.WARN, "Session deleted for user: ", user_email, " - forcing logout")
-        
+
         red:set_keepalive(10000, 100)
-        
+
         ngx.status = ngx.HTTP_UNAUTHORIZED
         ngx.header.content_type = "application/json"
         ngx.say(cjson.encode({
@@ -74,13 +98,13 @@ if red then
 
     -- セッションキーが存在するか確認（より厳密なチェック）
     local session_keys, err = red:smembers(active_user_key)
-    
+
     if not session_keys or #session_keys == 0 then
         -- セッションキーが空 = セッションが削除された
         ngx.log(ngx.WARN, "Empty session for user: ", user_email, " - forcing logout")
-        
+
         red:set_keepalive(10000, 100)
-        
+
         ngx.status = ngx.HTTP_UNAUTHORIZED
         ngx.header.content_type = "application/json"
         ngx.say(cjson.encode({
@@ -92,11 +116,11 @@ if red then
 
     -- 🔍 さらに厳密: OAuth2 ProxyのCookieとRedisのセッションキーが一致するか確認
     local oauth2_cookie = get_cookie_value("_oauth2_proxy")
-    
+
     if oauth2_cookie then
         -- Cookieから推測されるセッションキーを生成（簡易版）
         -- 実際のセッションキーとの照合はOAuth2 Proxyが行うため、ここではactive_userの存在確認で十分
-        
+
         ngx.log(ngx.DEBUG, "Session validated for user: ", user_email, " with ", #session_keys, " active sessions")
     end
 

@@ -19,7 +19,7 @@
 - **🛡️ セキュリティ強化**
   - ユーザー削除時の即時トークン無効化
   - Redisベースのトークンブラックリスト管理
-  - **再ログイン防止機能付きセッション削除**（NEW）
+  - **強制ログアウト機能付きセッション削除**（NEW）
   - OAuth2セッションチェック（実装予定：毎日再認証）
 
 - **📊 完全な可観測性**
@@ -29,11 +29,11 @@
   - ユーザー個別の予算制限設定が可能
 
 - **🔄 トークン・セッション管理**
-  - Webベースのトークン管理UI
-  - **Webベースのセッション管理UI**（NEW）
+  - **統合Webベース管理UI**（NEW）
   - ユーザーごとに複数トークン発行可能
   - カスタム有効期限設定
-  - **削除フラグシステムによる強制ログアウト**（NEW）
+  - **リアルタイムセッション監視**（NEW）
+  - **強制ログアウト機能**（NEW）
 
 - **🚀 本番環境対応**
   - Docker Composeによる簡単デプロイ
@@ -55,7 +55,6 @@
 │         OpenResty (ゲートウェイ)      │
 │  - JWT検証                           │
 │  - OAuth2セッションチェック           │
-│  - セッション削除フラグチェック (NEW) │
 │  - リクエストルーティング             │
 └──────┬───────────┬───────────────────┘
        │           │
@@ -64,8 +63,7 @@
        │                ┌──────────┐
        │                │  Redis   │
        │                │(トークン  │
-       │                │ セッション│
-       │                │ フラグ)  │
+       │                │ セッション)│
        │                └──────────┘
        │
     ┌──┴─────────────────┐
@@ -189,13 +187,31 @@ curl -I http://{your-fqdn}
 
 1. `http://{your-fqdn}` にアクセス
 2. Auth0経由でログイン
-3. `http://{your-fqdn}/token-manager` でトークンマネージャーにアクセス
-4. Web UIからJWTトークンを生成・管理
+3. `http://{your-fqdn}/token-session-manager` でToken & Session Managerにアクセス
+4. 統合Web UIからJWTトークンとセッションを管理
 
 **利用可能なUI**:
 - **Token Manager** (`/token-manager`): APIトークンの生成と管理
-- **Token & Session Manager** (`/token-session-manager`): トークンとセッションの統合管理（管理者のみ）
+- **Token & Session Manager** (`/token-session-manager`): リアルタイム監視機能を備えたトークンとセッションの統合管理（管理者のみ）
 - **Admin Manager** (`/admin-manager`): ユーザー管理用の管理パネル（管理者のみ）
+
+### Token & Session Manager の機能
+
+統合管理インターフェースで以下の機能を提供:
+
+**Tokensタブ**:
+- 全ユーザーのJWTトークン一覧表示
+- トークン統計情報（合計、アクティブ、期限切れ、失効済み）
+- メールアドレスまたはトークン名による検索
+- アクティブトークンの失効
+- リアルタイムステータス更新
+
+**Sessionsタブ**:
+- 全アクティブOAuth2セッション一覧表示
+- セッション統計情報（総セッション数、ユニークユーザー数）
+- メールアドレスによる検索
+- セッション削除によるユーザーの強制ログアウト
+- セッションTTL（有効期限）の監視
 
 ### Token Manager UIでJWTトークンを生成
 
@@ -386,6 +402,7 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 **仕組み**:
 - OpenRestyが各APIリクエストにOAuth2メールアドレスを自動付与
+- LiteLLMが最初のリクエスト時にCustomerレコードを自動作成
 - LiteLLMがメールアドレス毎に使用量を追跡
 - 予算制限が自動的に適用される
 - ユーザーが制限を超えるとリクエストが拒否される
@@ -398,74 +415,107 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 ### 強制ログアウト機能
 
-管理者は削除フラグシステムを使用して、ユーザーのセッションを強制的に削除し、自動再ログインを防止できます。
+管理者はユーザーのセッションを強制的に削除して、即座にアクセスを無効化できます。システムはUIベースとAPIベースの両方の管理方法を提供します。
 
 #### 動作の仕組み
 
-1. **管理者がセッションを削除** Token & Session ManagerまたはAPI経由
-2. **削除フラグが作成される** Redisに60秒間有効なフラグを作成
-3. **ユーザーがアクセスを試みる**（60秒以内）
-4. **システムが削除フラグをチェック** セッション再作成をブロック
-5. **401エラーを返す** メッセージ: "セッションが削除されました"
-6. **ログイン画面にリダイレクト**
-7. **60秒後**、削除フラグが自動的に期限切れ
-8. **再ログイン可能** 通常通りログインできる
+1. **管理者がセッションを削除** Token & Session Manager UIまたはAPI経由
+2. **セッションがRedisから即座に削除される**
+3. **ユーザーの次のリクエストが401 Unauthorizedで失敗**
+4. **ユーザーが自動的にログイン画面にリダイレクトされる**
+5. **ユーザーはアクセスを回復するために再認証が必要**
 
 #### 使用方法
 
 **方法1: Token & Session Manager UI（推奨）**
 
 1. `http://{your-fqdn}/token-session-manager` にアクセス（管理者のみ）
-2. **Sessions** タブに移動
+2. **Sessions** タブをクリック
 3. メールアドレスでユーザーを検索
-4. ユーザーのセッションの横にある **Delete** ボタンをクリック
-5. 削除を確認
+4. ユーザーのセッションの横にある **削除** ボタンをクリック
+5. ダイアログで削除を確認
+
+**期待されるUI動作**:
+- 成功メッセージが表示される: "Session を削除しました"
+- セッションリストが自動的に更新される
+- 削除されたセッションはリストに表示されなくなる
+
+**方法2: 単一セッションの削除（API）**
+
+```bash
+# UIまたはAPIからセッションキーを取得してから削除
+curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
+
+**期待されるレスポンス**:
+```json
+{
+  "message": "Session deleted successfully",
+  "session_key": "_oauth2_proxy-abc123...",
+  "deleted_by": "admin@example.com"
+}
+```
+
+**方法3: ユーザーの全セッション削除（API）**
+
+```bash
+# 特定ユーザーの全セッションを削除
+curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_email": "user@example.com"
+  }'
+```
 
 **期待されるレスポンス**:
 ```json
 {
   "message": "User sessions deleted successfully",
   "user_email": "user@example.com",
-  "deleted_count": 1,
-  "deletion_flag_created": true,
-  "deletion_flag_ttl": 60
+  "deleted_count": 2,
+  "deleted_by": "admin@example.com"
 }
-```
-
-**方法2: API**
-
-```bash
-# 内部ポート経由（OAuth2をバイパス）
-curl -X POST http://localhost:8080/api/admin/sessions/revoke-user \
-  -H "Content-Type: application/json" \
-  -H "X-Forwarded-Email: admin@example.com" \
-  -d '{"user_email":"user@example.com"}'
 ```
 
 #### 技術詳細
 
 **実装**:
-- **session_admin.lua**: セッション削除時に削除フラグを作成
-- **active_user_tracker.lua**: active_user作成前に削除フラグをチェック
-- **削除フラグTTL**: 60秒（自動期限切れ）
+- **session_admin.lua**: 全てのセッション管理APIエンドポイントを処理
+- **OAuth2 Proxy**: セッションをRedisに `_oauth2_proxy-*` のキーパターンで保存
+- **セッションデータ**: ユーザーメールアドレス、作成時刻、有効期限、認証メタデータを含む
+
+**検索されるセッションキーパターン**:
+```
+_oauth2_proxy-*      # プライマリパターン（ハイフン形式）
+_oauth2_proxy_*      # 代替パターン（アンダースコア形式）
+_oauth2_proxy:*      # 代替パターン（コロン形式）
+oauth2-*             # レガシーパターン
+oauth2_*             # レガシーパターン
+session:*            # 汎用パターン
+```
 
 **動作**:
-- ✅ セッション削除後の自動再ログインを防止
-- ✅ ユーザーに明確なエラーメッセージを表示
-- ✅ 60秒後に自動期限切れで通常の再ログインが可能
-- ✅ 他のユーザーへの影響なし
+- ✅ Redisからの即時セッション削除
+- ✅ 次のリクエストでユーザーが自動的にログアウト
+- ✅ ユーザーごとの複数セッションをサポート
+- ✅ 管理者監査ログを含む
+- ✅ 他のユーザーのセッションに影響なし
 
 **ユーザー体験**:
 ```
 管理者がセッションを削除
   ↓
-ユーザーがページをリロード（60秒以内）
+ユーザーがブラウジングを続ける
   ↓
-401エラー: "セッションが管理者によって削除されました。再度ログインしてください。"
+保護されたエンドポイントへの次のリクエスト
   ↓
-ログイン画面にリダイレクト
+401 Unauthorized: Cookieが見つからないか無効
   ↓
-60秒後: 通常のログインが可能
+Auth0ログイン画面への自動リダイレクト
+  ↓
+システムにアクセスするには再ログインが必要
 ```
 
 ---
@@ -512,17 +562,45 @@ sudo docker compose logs -f openresty
 
 ### セッション管理API（NEW）
 
-| エンドポイント | メソッド | 説明 |
-|--------------|---------|------|
-| `/api/admin/sessions` | GET | 全セッション一覧（管理者のみ） |
-| `/api/admin/sessions/revoke-user` | POST | ユーザーセッション削除（管理者のみ） |
-| `/api/admin/sessions/stats` | GET | セッション統計取得（管理者のみ） |
+| エンドポイント | メソッド | 説明 | 認証要件 |
+|--------------|---------|------|----------|
+| `/api/admin/sessions` | GET | 全アクティブセッション一覧を取得 | 管理者のみ |
+| `/api/admin/sessions/{session_key}` | DELETE | 特定のセッションを削除 | 管理者のみ |
+| `/api/admin/sessions/revoke-user` | POST | ユーザーの全セッションを削除 | 管理者のみ |
+| `/api/admin/sessions/stats` | GET | セッション統計を取得 | 管理者のみ |
+
+#### セッションAPI使用例
+
+**全セッション一覧**:
+```bash
+curl http://{your-fqdn}/api/admin/sessions \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
+
+**セッション統計取得**:
+```bash
+curl http://{your-fqdn}/api/admin/sessions/stats \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
+
+レスポンス:
+```json
+{
+  "total_sessions": 15,
+  "unique_users": 8,
+  "user_sessions": {
+    "user1@example.com": 2,
+    "user2@example.com": 1,
+    "admin@example.com": 3
+  }
+}
+```
 
 ### ユーザー管理
 
 1. **ユーザー追加**: Auth0ダッシュボードで追加
 2. **ユーザー削除**: Auth0から削除 → 全トークンが24時間以内に無効化
-3. **強制ログアウト**: セッション削除機能を使用（即座に有効）
+3. **強制ログアウト**: UIまたはAPI経由でセッション削除機能を使用（即座に有効）
 
 ---
 
@@ -537,6 +615,7 @@ sudo docker compose logs -f openresty
 - ✅ Auth0でMFAを有効化
 - ✅ Langfuseで不審な活動を監視
 - ✅ 即座のユーザーロックアウトにはセッション削除機能を使用
+- ✅ Token & Session Manager経由でアクティブセッションを定期的に監査
 
 ### OAuth2セッション検証
 
@@ -544,7 +623,8 @@ sudo docker compose logs -f openresty
 - JWTトークンは全APIリクエストで検証されます
 - トークン失効はRedisブラックリスト経由で即座に有効化
 - OAuth2のメールアドレスが全LiteLLM APIリクエストに付与され、ユーザー毎の追跡が可能
-- **再ログイン防止機能付きセッション削除**（NEW）
+- **強制ログアウト機能付きセッション削除**（NEW）
+- **リアルタイムセッション監視**（NEW）
 
 **実装予定の強化機能**:
 - OAuth2セッションが存在し有効である必要があります
@@ -577,7 +657,8 @@ sudo docker compose logs -f openresty
 | JWT検証失敗 | lua-resty-jwtを再インストール |
 | OAuth2セッション期限切れ | ブラウザで再認証 |
 | 接続拒否 | コンテナの状態を確認: `docker compose ps` |
-| セッション削除が機能しない | Redisで削除フラグを確認: `redis-cli GET "active_user_deleted:email"` |
+| セッション削除が機能しない | Redis接続とセッションキー形式を確認 |
+| UIでセッションが表示されない | 管理者ユーザーでログインしていることを確認 |
 
 ### デバッグモード
 
