@@ -38,7 +38,10 @@ RUN git clone https://github.com/ledgetech/lua-resty-http.git && \
 RUN mkdir -p /usr/local/openresty/nginx/html && \
     mkdir -p /var/log/nginx && \
     chmod 755 /usr/local/openresty/nginx/html && \
-    chmod 755 /var/log/nginx
+    chmod 755 /var/log/nginx && \
+    mkdir -p /var/cache/nginx/proxy_temp && \
+    mkdir -p /var/cache/nginx/client_temp
+    
 
 # gitは不要なので削除（イメージサイズ削減）
 RUN apk del git

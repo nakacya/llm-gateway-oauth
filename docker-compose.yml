@@ -25,6 +25,7 @@ services:
       - ADMIN_DOMAINS=${ADMIN_DOMAINS}            # 追加
       - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}    # 追加
       - LITELLM_SHARED_KEY=${LITELLM_SHARED_KEY} 
+      - CLEANUP_LOG_RETENTION_DAYS=${CLEANUP_LOG_RETENTION_DAYS:-30}
     networks:
       - app-network
     restart: unless-stopped
