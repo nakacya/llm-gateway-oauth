@@ -19,7 +19,8 @@
 - **🛡️ Enhanced Security**
   - Immediate token revocation on user removal
   - Redis-based token blacklist management
-  - **Session deletion with force logout** (NEW)
+  - **Session deletion with force logout**
+  - **Instant user BAN feature (7-day forced logout)** (NEW)
   - OAuth2 session check (planned: daily re-authentication)
 
 - **📊 Complete Observability**
@@ -29,11 +30,19 @@
   - Individual user budget limits available
 
 - **🔄 Token & Session Management**
-  - **Unified web-based management UI** (NEW)
+  - **4-tab unified management dashboard** (NEW)
   - Multiple tokens per user
   - Custom expiration settings
-  - **Real-time session monitoring** (NEW)
-  - **Force logout functionality** (NEW)
+  - **Real-time session monitoring**
+  - **Active user tracking with BAN management** (NEW)
+  - **Force logout functionality**
+
+- **🧹 Redis Cleanup** (NEW)
+  - Automatic orphaned token cleanup
+  - **Detailed deletion audit logs with expandable details** (NEW)
+  - Manual and scheduled cleanup support
+  - Memory usage optimization
+  - 30-day log retention
 
 - **🚀 Production Ready**
   - Docker Compose deployment
@@ -188,30 +197,59 @@ curl -I http://{your-fqdn}
 1. Navigate to `http://{your-fqdn}`
 2. Log in via Auth0
 3. Access Token & Session Manager at `http://{your-fqdn}/token-session-manager`
-4. Manage JWT tokens and sessions through the unified web UI
+4. Manage JWT tokens, sessions, active users, and Redis cleanup through the unified web UI
 
 **Available UIs**:
 - **Token Manager** (`/token-manager`): Generate and manage your API tokens
-- **Token & Session Manager** (`/token-session-manager`): Unified token and session management with real-time monitoring (admin only)
+- **Token & Session Manager** (`/token-session-manager`): 4-tab unified management dashboard with real-time monitoring (admin only)
 - **Admin Manager** (`/admin-manager`): Admin panel for user management (admin only)
 
-### Token & Session Manager Features
+### Token & Session Manager Features (4-Tab Dashboard)
 
-The unified management interface provides:
+The unified management interface provides comprehensive control:
 
-**Tokens Tab**:
+**👥 Active Users Tab** (NEW):
+- View all active users with session counts
+- Track last access time and expiration
+- **Instant BAN feature** (7-day forced logout)
+- **Unban users** when needed
+- Display BAN status with remaining time
+- Statistics dashboard (total users, banned users)
+- Search users by email address
+- Cleanup expired user data
+
+**🔐 Sessions Tab**:
+- View all active OAuth2 sessions
+- Session statistics (total sessions, unique users)
+- Search by email
+- Force logout users by deleting sessions
+- Monitor session TTL (Time To Live)
+- Individual session revocation
+
+**🎫 Tokens Tab**:
 - View all JWT tokens across users
 - Token statistics (total, active, expired, revoked)
 - Search by email or token name
 - Revoke active tokens
 - Real-time status updates
 
-**Sessions Tab**:
-- View all active OAuth2 sessions
-- Session statistics (total sessions, unique users)
-- Search by email
-- Force logout users by deleting sessions
-- Monitor session TTL (Time To Live)
+**🧹 Cleanup Tab** (NEW):
+- **Preview cleanup targets** before deletion
+  - Orphaned JWT token IDs count
+  - Orphaned metadata count
+  - Estimated memory to be freed
+  - Detailed JSON of items to be deleted
+- **Execute manual cleanup** operations
+  - Delete orphaned token IDs from user:tokens sets
+  - Remove orphaned active_user_metadata entries
+  - Clean up empty token sets
+  - View execution results with deletion count and freed memory
+- **View cleanup logs** with detailed audit trail
+  - **Expandable deletion details** per execution (NEW)
+  - User emails and token IDs
+  - Deletion reasons and timestamps
+  - 30-day log retention
+  - Full execution history
 
 ### Generate JWT Token via Token Manager UI
 
@@ -299,6 +337,27 @@ Modify in `oauth2_proxy.cfg`:
 
 ```ini
 cookie_expire = "24h"
+```
+
+### Admin Configuration
+
+Configure admin users in `.env`:
+
+```bash
+# Super admin (full access)
+SUPER_ADMIN_EMAIL=admin@example.com
+
+# Regular admins (token/session management)
+ADMIN_EMAILS=admin1@example.com,admin2@example.com
+```
+
+### Cleanup Log Retention
+
+Configure in `.env`:
+
+```bash
+# Cleanup log retention period (days)
+CLEANUP_LOG_RETENTION_DAYS=30
 ```
 
 ### LiteLLM Shared API Key Setup (Required)
@@ -411,15 +470,148 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 ---
 
-## 🛡️ Session Management (NEW)
+## 🧹 Redis Cleanup Feature
+
+### Overview
+
+The Redis Cleanup feature automatically identifies and removes orphaned data that accumulates over time:
+
+**Auto-deleted by TTL**:
+- `token:info:*` - Deleted when token expires
+- `revoked:token:*` - Deleted at original token expiration
+- `active_user_deleted:*` - Deleted after 7 days
+- `_oauth2_proxy*` - Deleted when session expires
+
+**Requires manual cleanup**:
+- Orphaned token IDs in `user:tokens:*` sets (remain after `token:info` deletion)
+- Orphaned `active_user_metadata:*` entries
+
+### Usage
+
+1. **Access Cleanup Tab**:
+   ```
+   https://{your-fqdn}/token-session-manager
+   → Click "🧹 Cleanup" tab
+   ```
+
+2. **Preview Cleanup Targets**:
+   - Click "🔍 Preview (View without deleting)"
+   - Shows count of orphaned tokens and metadata
+   - Displays detailed JSON of items to be deleted
+   - Estimates memory to be freed
+
+3. **Execute Cleanup**:
+   - Click "🧹 Execute Cleanup"
+   - Confirm deletion
+   - View execution results including:
+     - Cleanup ID
+     - Execution timestamp
+     - Items deleted count
+     - Memory freed
+     - Detailed deletion log with user emails and token IDs
+
+4. **View Cleanup Logs**:
+   - Click "📋 View Logs"
+   - Browse past cleanup executions
+   - **Expand detailed deletion logs** per execution (NEW)
+     - Click "📋 Show Deletion Details" button
+     - View user emails, token IDs, and deletion reasons
+     - Color-coded deletion types and reasons
+     - Timestamps for each deletion
+   - Track cleanup history (30-day retention)
+
+### Cleanup API
+
+**Preview cleanup targets**:
+```bash
+curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/preview \
+  -H "Cookie: _oauth2_proxy=..."
+```
+
+**Execute cleanup**:
+```bash
+curl -X POST https://{your-fqdn}/api/admin/redis/cleanup \
+  -H "Cookie: _oauth2_proxy=..."
+```
+
+**View cleanup logs**:
+```bash
+curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/logs \
+  -H "Cookie: _oauth2_proxy=..."
+```
+
+---
+
+## 🛡️ Session Management & User BAN
+
+### Instant BAN Feature (NEW)
+
+Administrators can immediately ban users for emergency situations like employee departures or security incidents.
+
+**How It Works**:
+
+1. **Admin bans user** via Active Users tab
+2. **All user sessions deleted** from Redis immediately
+3. **BAN record created** with 7-day expiration
+4. **User's next request fails** with 401 Unauthorized
+5. **User redirected** to login screen
+6. **OAuth2 authentication blocked** for 7 days
+7. **Auto-unban after 7 days** + OAuth2 re-authentication
+
+**BAN Duration**: 7 days (604,800 seconds)
+
+**Usage Methods**:
+
+**Method 1: Token & Session Manager UI (Recommended)**
+
+1. Access `http://{your-fqdn}/token-session-manager` (admin only)
+2. Click on **Active Users** tab
+3. Search for user by email address
+4. Click **🔥 Instant BAN (7 days)** button
+5. Confirm BAN in the dialog
+
+**Expected UI behavior**:
+- Success message: "✅ {email} を即時BANしました(7日間)"
+- Session count displayed
+- Active Users list refreshes automatically
+- User row highlighted in red with BAN status badge
+
+**Method 2: BAN via API**
+
+```bash
+curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_email": "user@example.com"
+  }'
+```
+
+**Expected response**:
+```json
+{
+  "message": "User banned successfully",
+  "user_email": "user@example.com",
+  "deleted_count": 2,
+  "ban_duration_seconds": 604800,
+  "deleted_by": "admin@example.com"
+}
+```
+
+**Unban User**:
+
+```bash
+curl -X DELETE http://{your-fqdn}/api/admin/sessions/unban/{email} \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
 
 ### Force Logout Feature
 
-Administrators can forcefully delete user sessions to immediately revoke access. The system provides both UI-based and API-based management.
+Administrators can forcefully delete user sessions to immediately revoke access.
 
 #### How It Works
 
-1. **Admin deletes user session** via Token & Session Manager UI or API
+1. **Admin deletes user session** via Sessions tab or API
 2. **Session is removed** from Redis immediately
 3. **User's next request fails** with 401 Unauthorized
 4. **User is redirected** to login screen automatically
@@ -453,28 +645,6 @@ curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
 {
   "message": "Session deleted successfully",
   "session_key": "_oauth2_proxy-abc123...",
-  "deleted_by": "admin@example.com"
-}
-```
-
-**Method 3: Delete All User Sessions (API)**
-
-```bash
-# Delete all sessions for a specific user
-curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
-  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_email": "user@example.com"
-  }'
-```
-
-**Expected response**:
-```json
-{
-  "message": "User sessions deleted successfully",
-  "user_email": "user@example.com",
-  "deleted_count": 2,
   "deleted_by": "admin@example.com"
 }
 ```
@@ -560,47 +730,28 @@ sudo docker compose logs -f openresty
 | `/api/token/info?token_id=xxx` | GET | Get token details |
 | `/api/token/revoke` | POST | Revoke token |
 
-### Session Management API (NEW)
+### Admin Token & Session Management API
 
 | Endpoint | Method | Description | Auth Required |
 |----------|--------|-------------|---------------|
+| `/api/admin/tokens` | GET | List all user tokens | Admin only |
+| `/api/admin/tokens/{token_id}` | DELETE | Revoke any user's token | Admin only |
 | `/api/admin/sessions` | GET | List all active sessions | Admin only |
 | `/api/admin/sessions/{session_key}` | DELETE | Delete specific session | Admin only |
-| `/api/admin/sessions/revoke-user` | POST | Delete all sessions for a user | Admin only |
+| `/api/admin/sessions/active-users` | GET | List active users | Admin only |
+| `/api/admin/sessions/revoke-user` | POST | BAN user - revoke all sessions | Admin only |
+| `/api/admin/sessions/unban/{email}` | DELETE | Unban user | Admin only |
 | `/api/admin/sessions/stats` | GET | Get session statistics | Admin only |
-
-#### Session API Examples
-
-**List All Sessions**:
-```bash
-curl http://{your-fqdn}/api/admin/sessions \
-  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
-```
-
-**Get Session Statistics**:
-```bash
-curl http://{your-fqdn}/api/admin/sessions/stats \
-  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
-```
-
-Response:
-```json
-{
-  "total_sessions": 15,
-  "unique_users": 8,
-  "user_sessions": {
-    "user1@example.com": 2,
-    "user2@example.com": 1,
-    "admin@example.com": 3
-  }
-}
-```
+| `/api/admin/redis/cleanup/preview` | GET | Preview cleanup targets | Admin only |
+| `/api/admin/redis/cleanup` | POST | Execute cleanup | Admin only |
+| `/api/admin/redis/cleanup/logs` | GET | View cleanup logs | Admin only |
 
 ### User Management
 
 1. **Add User**: Add to Auth0 dashboard
 2. **Remove User**: Delete from Auth0 → All tokens become invalid within 24 hours
-3. **Force Logout**: Use session deletion feature via UI or API (immediate effect)
+3. **Emergency BAN**: Use instant BAN feature in Active Users tab (immediate, 7-day block)
+4. **Force Logout**: Use session deletion feature via Sessions tab (immediate effect)
 
 ---
 
@@ -614,7 +765,9 @@ Response:
 - ✅ Set `.env` file permissions: `chmod 600 .env`
 - ✅ Enable MFA in Auth0
 - ✅ Monitor Langfuse for suspicious activity
+- ✅ Use instant BAN feature for immediate threat response
 - ✅ Use session deletion feature for immediate user lockout
+- ✅ Review cleanup logs regularly for anomalies
 - ✅ Regularly audit active sessions via Token & Session Manager
 
 ### OAuth2 Session Validation
@@ -623,8 +776,9 @@ Response:
 - JWT tokens are validated on every API request
 - Token revocation is immediate via Redis blacklist
 - OAuth2 email is attached to all LiteLLM API requests for per-user tracking
-- **Session deletion with force logout** (NEW)
-- **Real-time session monitoring** (NEW)
+- **Session deletion with force logout**
+- **Instant BAN feature with 7-day block**
+- **Real-time session monitoring**
 
 **Planned enhancements**:
 - OAuth2 session must exist and be valid
@@ -644,6 +798,7 @@ Response:
 | [OAUTH2_SESSION_CHECK_GUIDE.md](docs/OAUTH2_SESSION_CHECK_GUIDE.md) | Session validation feature |
 | [OPERATIONS.md](docs/OPERATIONS.md) | Daily operations |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ---
 
@@ -659,6 +814,9 @@ Response:
 | Connection refused | Check container status: `docker compose ps` |
 | Session deletion not working | Verify Redis connection and session key format |
 | Can't see sessions in UI | Ensure you're logged in as admin user |
+| Cleanup not working | Check admin permissions and Redis connectivity |
+| BAN not effective | Verify email matching and BAN record creation |
+| Can't expand deletion details | Ensure using token_session_manager v4.0+ |
 
 ### Debug Mode
 

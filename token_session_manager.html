@@ -44,6 +44,7 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .tab {
@@ -238,12 +239,45 @@
             background: #5a67d8;
         }
 
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
+
+        .btn-secondary {
+            background: #718096;
+            color: white;
+            font-size: 13px;
+            padding: 6px 12px;
+        }
+
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .alert {
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
         }
-
 
         .alert-success {
             background: #c6f6d5;
@@ -258,6 +292,11 @@
         .alert-warning {
             background: #feebc8;
             color: #744210;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            color: #2c5282;
         }
 
         .loading {
@@ -312,19 +351,246 @@
             color: #742a2a;
             line-height: 1.6;
         }
+
+        /* Cleanup specific styles */
+        .cleanup-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .cleanup-preview {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .cleanup-preview h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .cleanup-preview pre {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .cleanup-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .cleanup-stat {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .cleanup-stat h4 {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .cleanup-stat p {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .info-box {
+            background: #e6fffa;
+            border-left: 4px solid #38b2ac;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info-box h4 {
+            color: #234e52;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+            color: #2c7a7b;
+        }
+
+        .info-box li {
+            margin-bottom: 5px;
+        }
+
+        .log-entry {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .log-id {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .log-time {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .log-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .log-detail {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .log-detail strong {
+            font-size: 12px;
+            color: #718096;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .log-detail span {
+            font-size: 16px;
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        /* 削除明細の展開スタイル */
+        .deleted-items-section {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .deleted-items-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .deleted-items-count {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .deleted-items-content {
+            display: none;
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .deleted-items-content.show {
+            display: block;
+        }
+
+        .deleted-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f7fafc;
+            border-left: 3px solid #667eea;
+            border-radius: 4px;
+        }
+
+        .deleted-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .deleted-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .deleted-item-type {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+        }
+
+        .deleted-item-time {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .deleted-item-info {
+            font-size: 13px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+        .deleted-item-info strong {
+            color: #2d3748;
+        }
+
+        .deleted-item-token {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #667eea;
+            background: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-top: 3px;
+        }
+
+        .deleted-item-reason {
+            display: inline-block;
+            background: #feebc8;
+            color: #744210;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-top: 3px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🔐 Token & Session 管理</h1>
-            <p>管理者専用 - JWT Token と OAuth2 Session の統合管理(即時BAN機能付き)</p>
+            <p>管理者専用 - JWT Token と OAuth2 Session の統合管理(即時BAN機能・Redisクリーンアップ付き)</p>
         </div>
 
         <div class="tabs">
             <button class="tab active" onclick="switchTab('active-users')">👥 Active Users</button>
             <button class="tab" onclick="switchTab('sessions')">🔐 OAuth2 Sessions</button>
             <button class="tab" onclick="switchTab('tokens')">🎫 JWT Tokens</button>
+            <button class="tab" onclick="switchTab('cleanup')">🧹 Cleanup</button>
         </div>
 
         <div id="alert-container"></div>
@@ -427,6 +693,51 @@
                 <div id="token-list"></div>
             </div>
         </div>
+
+        <!-- Cleanupタブ -->
+        <div id="cleanup-tab" class="tab-content">
+            <div class="card">
+                <h2>🧹 Redis クリーンアップ</h2>
+
+                <div class="info-box">
+                    <h4>ℹ️ クリーンアップについて</h4>
+                    <p><strong>自動削除（TTL）されるもの:</strong></p>
+                    <ul>
+                        <li>token:info:* - Token期限切れ時に自動削除</li>
+                        <li>revoked:token:* - Token元の有効期限で自動削除</li>
+                        <li>active_user_deleted:* - 7日後に自動削除</li>
+                        <li>_oauth2_proxy* - セッション期限切れ時に自動削除</li>
+                    </ul>
+                    <p style="margin-top: 10px;"><strong>手動クリーンアップが必要:</strong></p>
+                    <ul>
+                        <li>user:tokens:* 内の孤立Token ID（token:info削除後も残る）</li>
+                        <li>active_user_metadata:* の孤立データ</li>
+                    </ul>
+                </div>
+
+                <div class="cleanup-actions">
+                    <button class="btn btn-primary" onclick="loadCleanupPreview()">
+                        🔍 プレビュー（削除せず確認）
+                    </button>
+                    <button class="btn btn-warning" onclick="executeCleanup()" id="execute-cleanup-btn">
+                        🧹 クリーンアップ実行
+                    </button>
+                    <button class="btn btn-success" onclick="loadCleanupLogs()">
+                        📋 ログ表示
+                    </button>
+                </div>
+
+                <div id="cleanup-preview-section" style="display: none;">
+                    <h3>削除対象のプレビュー</h3>
+                    <div id="cleanup-preview-content"></div>
+                </div>
+
+                <div id="cleanup-logs-section" style="display: none;">
+                    <h3>クリーンアップ実行ログ</h3>
+                    <div id="cleanup-logs-content"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -449,6 +760,8 @@
                 loadSessions();
             } else if (tabName === 'active-users') {
                 loadActiveUsers();
+            } else if (tabName === 'cleanup') {
+                // Cleanupタブは手動でプレビューボタンを押す
             }
         }
 
@@ -480,7 +793,11 @@
             return `${mins}分`;
         }
 
-        // 🆕 Active User一覧を読み込み
+        // ===========================================
+        // Active Users 機能
+        // ===========================================
+
+        // Active User一覧を読み込み
         async function loadActiveUsers() {
             const activeUserList = document.getElementById('active-user-list');
             activeUserList.innerHTML = '<div class="loading">読み込み中...</div>';
@@ -497,9 +814,9 @@
                 const data = await response.json();
                 allActiveUsers = Array.isArray(data.active_users) ? data.active_users : [];
 
-                // ✅ 統計を更新（修正版: APIレスポンスから直接取得）
+                // 統計を更新
                 document.getElementById('total-active-users').textContent = data.total || 0;
-                const bannedCount = data.banned_count || 0;  // ★ 修正: APIレスポンスから取得
+                const bannedCount = data.banned_count || 0;
                 document.getElementById('banned-users').textContent = bannedCount;
 
                 renderActiveUsers(allActiveUsers);
@@ -510,7 +827,7 @@
             }
         }
 
-        // 🆕 Active User一覧を表示(視覚的強化版)
+        // Active User一覧を表示
         function renderActiveUsers(users) {
             const activeUserList = document.getElementById('active-user-list');
 
@@ -567,7 +884,7 @@
             activeUserList.innerHTML = html;
         }
 
-        // 🆕 Active User検索
+        // Active User検索
         document.addEventListener('DOMContentLoaded', () => {
             const searchInput = document.getElementById('active-user-search');
             if (searchInput) {
@@ -581,7 +898,7 @@
             }
         });
 
-        // 🆕 ユーザーをBAN
+        // ユーザーをBAN
         async function banUser(userEmail) {
             if (!confirm(`⚠️ 本当に ${userEmail} を即時BANしますか?\n\n` +
                          `・BAN期間: 7日間\n` +
@@ -614,7 +931,7 @@
             }
         }
 
-        // 🆕 ユーザーのBANを解除
+        // ユーザーのBANを解除
         async function unbanUser(userEmail) {
             if (!confirm(`${userEmail} のBANを解除しますか?\n\nユーザーは即座にアクセス可能になります。`)) {
                 return;
@@ -640,7 +957,7 @@
             }
         }
 
-        // 🆕 期限切れユーザーをクリーンアップ
+        // 期限切れユーザーをクリーンアップ
         async function cleanupExpiredUsers() {
             if (!confirm('⚠️ 期限切れのアクティブユーザー情報を削除しますか?\n\n' +
                          'この操作は元に戻せません。\n' +
@@ -672,6 +989,10 @@
                 showAlert(error.message, 'error');
             }
         }
+
+        // ===========================================
+        // Token 機能
+        // ===========================================
 
         // Token一覧を読み込み
         async function loadTokens() {
@@ -795,6 +1116,10 @@
             }
         }
 
+        // ===========================================
+        // Session 機能
+        // ===========================================
+
         // Session一覧を読み込み
         async function loadSessions() {
             const sessionList = document.getElementById('session-list');
@@ -901,6 +1226,274 @@
                 loadSessions();
 
             } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // ===========================================
+        // Cleanup 機能
+        // ===========================================
+
+        // クリーンアッププレビュー
+        async function loadCleanupPreview() {
+            const previewSection = document.getElementById('cleanup-preview-section');
+            const previewContent = document.getElementById('cleanup-preview-content');
+
+            previewSection.style.display = 'block';
+            previewContent.innerHTML = '<div class="loading">プレビューを読み込み中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/redis/cleanup/preview`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('プレビューの取得に失敗しました');
+                }
+
+                const data = await response.json();
+
+                // 統計表示
+                const statsHtml = `
+                    <div class="cleanup-stats">
+                        <div class="cleanup-stat">
+                            <h4>孤立Token ID</h4>
+                            <p>${data.counts.orphaned_jwt_token_ids || 0}</p>
+                        </div>
+                        <div class="cleanup-stat">
+                            <h4>孤立メタデータ</h4>
+                            <p>${data.counts.orphaned_metadata || 0}</p>
+                        </div>
+                        <div class="cleanup-stat">
+                            <h4>合計</h4>
+                            <p>${data.counts.total || 0}</p>
+                        </div>
+                        <div class="cleanup-stat">
+                            <h4>推定解放容量</h4>
+                            <p style="font-size: 18px;">${data.estimated_freed_memory || '0B'}</p>
+                        </div>
+                    </div>
+                `;
+
+                // 詳細表示
+                const detailsHtml = `
+                    <div class="cleanup-preview">
+                        <h4>📋 削除対象の詳細</h4>
+                        <pre>${JSON.stringify(data.targets, null, 2)}</pre>
+                    </div>
+                `;
+
+                previewContent.innerHTML = statsHtml + detailsHtml;
+
+                // 実行ボタンの有効/無効
+                const executeBtn = document.getElementById('execute-cleanup-btn');
+                if (data.counts.total === 0) {
+                    executeBtn.disabled = true;
+                    executeBtn.textContent = '🧹 削除対象なし';
+                    showAlert('削除対象のデータがありません', 'info');
+                } else {
+                    executeBtn.disabled = false;
+                    executeBtn.textContent = `🧹 クリーンアップ実行 (${data.counts.total}件)`;
+                    showAlert(`${data.counts.total}件の削除対象が見つかりました`, 'info');
+                }
+
+            } catch (error) {
+                previewContent.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // クリーンアップ実行
+        async function executeCleanup() {
+            if (!confirm('本当にクリーンアップを実行しますか?\n孤立したデータが削除されます。')) {
+                return;
+            }
+
+            const executeBtn = document.getElementById('execute-cleanup-btn');
+            executeBtn.disabled = true;
+            executeBtn.textContent = '実行中...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/redis/cleanup`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('クリーンアップの実行に失敗しました');
+                }
+
+                const data = await response.json();
+
+                showAlert(`クリーンアップ完了: ${data.total_deleted}件削除 (${data.freed_memory})`, 'success');
+
+                // 結果を表示
+                const resultHtml = `
+                    <div class="alert alert-success">
+                        <h4>✅ クリーンアップ完了</h4>
+                        <p><strong>Cleanup ID:</strong> ${data.cleanup_id}</p>
+                        <p><strong>実行日時:</strong> ${new Date(data.executed_at * 1000).toLocaleString('ja-JP')}</p>
+                        <p><strong>削除件数:</strong> ${data.total_deleted}件</p>
+                        <p><strong>解放容量:</strong> ${data.freed_memory}</p>
+                        <p><strong>実行時間:</strong> ${data.duration_ms}ms</p>
+                        <hr style="margin: 10px 0;">
+                        <p><strong>詳細:</strong></p>
+                        <ul>
+                            <li>孤立Token ID: ${data.results.orphaned_jwt_token_ids_deleted}件</li>
+                            <li>孤立メタデータ: ${data.results.orphaned_metadata_deleted}件</li>
+                            <li>空セット: ${data.results.empty_token_sets_deleted}件</li>
+                        </ul>
+                    </div>
+                `;
+
+                document.getElementById('cleanup-preview-content').innerHTML = resultHtml;
+
+                // プレビューを再読み込み
+                setTimeout(() => {
+                    loadCleanupPreview();
+                }, 2000);
+
+            } catch (error) {
+                showAlert(error.message, 'error');
+                executeBtn.disabled = false;
+                executeBtn.textContent = '🧹 クリーンアップ実行';
+            }
+        }
+
+        // 削除明細のトグル表示
+        function toggleDeletedItems(cleanupId) {
+            const content = document.getElementById(`deleted-items-${cleanupId}`);
+            const button = document.getElementById(`toggle-btn-${cleanupId}`);
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                button.textContent = '📋 削除明細を表示';
+            } else {
+                content.classList.add('show');
+                button.textContent = '📋 削除明細を隠す';
+            }
+        }
+
+        // 削除明細の表示用フォーマット
+        function formatDeletedItems(items) {
+            if (!items || items.length === 0) {
+                return '<p style="color: #718096; text-align: center;">削除明細がありません</p>';
+            }
+
+            const typeLabels = {
+                'orphaned_jwt_token_id': '🎫 孤立Token ID',
+                'empty_token_set': '📦 空セット',
+                'orphaned_metadata': '📝 孤立メタデータ'
+            };
+
+            return items.map((item, index) => {
+                const typeLabel = typeLabels[item.type] || item.type;
+                const timestamp = new Date(item.timestamp * 1000).toLocaleString('ja-JP');
+                
+                return `
+                    <div class="deleted-item">
+                        <div class="deleted-item-header">
+                            <span class="deleted-item-type">${index + 1}. ${typeLabel}</span>
+                            <span class="deleted-item-time">${timestamp}</span>
+                        </div>
+                        <div class="deleted-item-info">
+                            <strong>ユーザー:</strong> ${item.user_email || '-'}<br>
+                            ${item.token_id ? `<span class="deleted-item-token">Token: ${item.token_id}</span><br>` : ''}
+                            <span class="deleted-item-reason">${item.reason}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // クリーンアップログ表示（削除明細展開機能付き）
+        async function loadCleanupLogs() {
+            const logsSection = document.getElementById('cleanup-logs-section');
+            const logsContent = document.getElementById('cleanup-logs-content');
+
+            logsSection.style.display = 'block';
+            logsContent.innerHTML = '<div class="loading">ログを読み込み中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/redis/cleanup/logs`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('ログの取得に失敗しました');
+                }
+
+                const data = await response.json();
+
+                if (data.logs.length === 0) {
+                    logsContent.innerHTML = '<div class="empty-state">実行ログがありません</div>';
+                    return;
+                }
+
+                const logsHtml = data.logs.map(log => {
+                    const deletedItemsCount = log.deleted_items ? log.deleted_items.length : 0;
+                    
+                    return `
+                        <div class="log-entry">
+                            <div class="log-header">
+                                <span class="log-id">${log.cleanup_id}</span>
+                                <span class="log-time">${new Date(log.timestamp * 1000).toLocaleString('ja-JP')}</span>
+                            </div>
+                            <div class="log-details">
+                                <div class="log-detail">
+                                    <strong>実行者</strong>
+                                    <span>${log.executed_by}</span>
+                                </div>
+                                <div class="log-detail">
+                                    <strong>削除件数</strong>
+                                    <span>${log.total_deleted}件</span>
+                                </div>
+                                <div class="log-detail">
+                                    <strong>解放容量</strong>
+                                    <span>${log.freed_memory}</span>
+                                </div>
+                                <div class="log-detail">
+                                    <strong>実行時間</strong>
+                                    <span>${log.duration_ms}ms</span>
+                                </div>
+                                <div class="log-detail">
+                                    <strong>Token ID</strong>
+                                    <span>${log.results.orphaned_jwt_token_ids_deleted}</span>
+                                </div>
+                                <div class="log-detail">
+                                    <strong>メタデータ</strong>
+                                    <span>${log.results.orphaned_metadata_deleted}</span>
+                                </div>
+                            </div>
+                            
+                            ${deletedItemsCount > 0 ? `
+                                <div class="deleted-items-section">
+                                    <div class="deleted-items-header">
+                                        <button class="btn btn-secondary" 
+                                                id="toggle-btn-${log.cleanup_id}"
+                                                onclick="toggleDeletedItems('${log.cleanup_id}')">
+                                            📋 削除明細を表示
+                                        </button>
+                                        <span class="deleted-items-count">${deletedItemsCount}件</span>
+                                    </div>
+                                    <div id="deleted-items-${log.cleanup_id}" class="deleted-items-content">
+                                        ${formatDeletedItems(log.deleted_items)}
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="deleted-items-section">
+                                    <p style="color: #a0aec0; text-align: center; margin: 10px 0;">削除明細: (0件)</p>
+                                </div>
+                            `}
+                        </div>
+                    `;
+                }).join('');
+
+                logsContent.innerHTML = logsHtml;
+                showAlert(`${data.total_logs}件のログを取得しました`, 'info');
+
+            } catch (error) {
+                logsContent.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
                 showAlert(error.message, 'error');
             }
         }

@@ -19,7 +19,8 @@
 - **🛡️ セキュリティ強化**
   - ユーザー削除時の即時トークン無効化
   - Redisベースのトークンブラックリスト管理
-  - **強制ログアウト機能付きセッション削除**（NEW）
+  - **強制ログアウト機能付きセッション削除**
+  - **即時BAN機能（7日間強制ログアウト）**（NEW）
   - OAuth2セッションチェック（実装予定：毎日再認証）
 
 - **📊 完全な可観測性**
@@ -29,11 +30,19 @@
   - ユーザー個別の予算制限設定が可能
 
 - **🔄 トークン・セッション管理**
-  - **統合Webベース管理UI**（NEW）
+  - **4タブ統合管理ダッシュボード**（NEW）
   - ユーザーごとに複数トークン発行可能
   - カスタム有効期限設定
-  - **リアルタイムセッション監視**（NEW）
-  - **強制ログアウト機能**（NEW）
+  - **リアルタイムセッション監視**
+  - **アクティブユーザー追跡とBAN管理**（NEW）
+  - **強制ログアウト機能**
+
+- **🧹 Redisクリーンアップ**（NEW）
+  - 孤立トークンの自動クリーンアップ
+  - **詳細削除監査ログと展開可能な明細**（NEW）
+  - 手動・スケジュールクリーンアップ対応
+  - メモリ使用量の最適化
+  - 30日間のログ保持
 
 - **🚀 本番環境対応**
   - Docker Composeによる簡単デプロイ
@@ -188,30 +197,59 @@ curl -I http://{your-fqdn}
 1. `http://{your-fqdn}` にアクセス
 2. Auth0経由でログイン
 3. `http://{your-fqdn}/token-session-manager` でToken & Session Managerにアクセス
-4. 統合Web UIからJWTトークンとセッションを管理
+4. 統合Web UIからJWTトークン、セッション、アクティブユーザー、Redisクリーンアップを管理
 
 **利用可能なUI**:
 - **Token Manager** (`/token-manager`): APIトークンの生成と管理
-- **Token & Session Manager** (`/token-session-manager`): リアルタイム監視機能を備えたトークンとセッションの統合管理（管理者のみ）
+- **Token & Session Manager** (`/token-session-manager`): リアルタイム監視機能を備えた4タブ統合管理ダッシュボード（管理者のみ）
 - **Admin Manager** (`/admin-manager`): ユーザー管理用の管理パネル（管理者のみ）
 
-### Token & Session Manager の機能
+### Token & Session Manager の機能（4タブダッシュボード）
 
-統合管理インターフェースで以下の機能を提供:
+統合管理インターフェースで包括的な制御を提供:
 
-**Tokensタブ**:
+**👥 Active Usersタブ**（NEW）:
+- 全アクティブユーザーとセッション数の表示
+- 最終アクセス時刻と有効期限の追跡
+- **即時BAN機能**（7日間強制ログアウト）
+- **必要に応じたBAN解除**
+- BAN残り時間の表示
+- 統計ダッシュボード（総ユーザー数、BANユーザー数）
+- メールアドレスによるユーザー検索
+- 期限切れユーザーデータのクリーンアップ
+
+**🔐 Sessionsタブ**:
+- 全アクティブOAuth2セッション一覧表示
+- セッション統計情報（総セッション数、ユニークユーザー数）
+- メールアドレスによる検索
+- セッション削除によるユーザーの強制ログアウト
+- セッションTTL（有効期限）の監視
+- 個別セッション失効
+
+**🎫 Tokensタブ**:
 - 全ユーザーのJWTトークン一覧表示
 - トークン統計情報（合計、アクティブ、期限切れ、失効済み）
 - メールアドレスまたはトークン名による検索
 - アクティブトークンの失効
 - リアルタイムステータス更新
 
-**Sessionsタブ**:
-- 全アクティブOAuth2セッション一覧表示
-- セッション統計情報（総セッション数、ユニークユーザー数）
-- メールアドレスによる検索
-- セッション削除によるユーザーの強制ログアウト
-- セッションTTL（有効期限）の監視
+**🧹 Cleanupタブ**（NEW）:
+- **削除前のクリーンアップ対象プレビュー**
+  - 孤立JWT Token ID数
+  - 孤立メタデータ数
+  - 推定解放容量
+  - 削除対象アイテムの詳細JSON
+- **手動クリーンアップ操作の実行**
+  - user:tokensセットからの孤立Token ID削除
+  - 孤立active_user_metadataエントリの削除
+  - 空トークンセットのクリーンアップ
+  - 削除件数と解放メモリを含む実行結果の表示
+- **詳細監査証跡付きクリーンアップログの表示**
+  - **実行ごとの展開可能な削除明細**（NEW）
+  - ユーザーメールアドレスとトークンID
+  - 削除理由とタイムスタンプ
+  - 30日間のログ保持
+  - 完全な実行履歴
 
 ### Token Manager UIでJWTトークンを生成
 
@@ -299,6 +337,27 @@ local MAX_EXPIRES_IN = 7776000  -- 90日
 
 ```ini
 cookie_expire = "24h"
+```
+
+### 管理者設定
+
+`.env`で管理者ユーザーを設定:
+
+```bash
+# スーパー管理者（全権限）
+SUPER_ADMIN_EMAIL=admin@example.com
+
+# 通常管理者（トークン・セッション管理）
+ADMIN_EMAILS=admin1@example.com,admin2@example.com
+```
+
+### クリーンアップログ保持期間
+
+`.env`で設定:
+
+```bash
+# クリーンアップログ保持期間（日数）
+CLEANUP_LOG_RETENTION_DAYS=30
 ```
 
 ### LiteLLM共有APIキーのセットアップ（必須）
@@ -411,15 +470,148 @@ curl -X GET 'http://{your-fqdn}:4000/customer/info?end_user_id=user@example.com'
 
 ---
 
-## 🛡️ セッション管理（NEW）
+## 🧹 Redisクリーンアップ機能
+
+### 概要
+
+Redisクリーンアップ機能は、時間とともに蓄積される孤立データを自動的に識別・削除します：
+
+**TTLによる自動削除**:
+- `token:info:*` - トークン期限切れ時に削除
+- `revoked:token:*` - 元のトークン有効期限で削除
+- `active_user_deleted:*` - 7日後に削除
+- `_oauth2_proxy*` - セッション期限切れ時に削除
+
+**手動クリーンアップが必要**:
+- `user:tokens:*` セット内の孤立トークンID（`token:info`削除後も残る）
+- 孤立した `active_user_metadata:*` エントリ
+
+### 使用方法
+
+1. **Cleanupタブにアクセス**:
+   ```
+   https://{your-fqdn}/token-session-manager
+   → 「🧹 Cleanup」タブをクリック
+   ```
+
+2. **クリーンアップ対象のプレビュー**:
+   - 「🔍 プレビュー（削除せず確認）」をクリック
+   - 孤立トークンとメタデータの件数を表示
+   - 削除対象の詳細JSON表示
+   - 解放される推定メモリ量を表示
+
+3. **クリーンアップ実行**:
+   - 「🧹 クリーンアップ実行」をクリック
+   - 削除を確認
+   - 実行結果を表示:
+     - Cleanup ID
+     - 実行タイムスタンプ
+     - 削除件数
+     - 解放メモリ
+     - ユーザーメールとトークンIDを含む詳細削除ログ
+
+4. **クリーンアップログ表示**:
+   - 「📋 ログ表示」をクリック
+   - 過去のクリーンアップ実行を閲覧
+   - **実行ごとの詳細削除ログを展開**（NEW）
+     - 「📋 削除明細を表示」ボタンをクリック
+     - ユーザーメール、トークンID、削除理由を表示
+     - カラーコード化された削除タイプと理由
+     - 各削除のタイムスタンプ
+   - クリーンアップ履歴を追跡（30日間保持）
+
+### Cleanup API
+
+**クリーンアップ対象のプレビュー**:
+```bash
+curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/preview \
+  -H "Cookie: _oauth2_proxy=..."
+```
+
+**クリーンアップ実行**:
+```bash
+curl -X POST https://{your-fqdn}/api/admin/redis/cleanup \
+  -H "Cookie: _oauth2_proxy=..."
+```
+
+**クリーンアップログ表示**:
+```bash
+curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/logs \
+  -H "Cookie: _oauth2_proxy=..."
+```
+
+---
+
+## 🛡️ セッション管理とユーザーBAN
+
+### 即時BAN機能（NEW）
+
+管理者は、退職や セキュリティインシデントなどの緊急時に、ユーザーを即座にBANできます。
+
+**動作の仕組み**:
+
+1. **管理者がユーザーをBAN** Active Usersタブ経由
+2. **全ユーザーセッションが即座に削除** Redisから
+3. **BAN記録が作成される** 7日間有効期限
+4. **ユーザーの次のリクエストが失敗** 401 Unauthorized
+5. **ユーザーがログイン画面にリダイレクト**
+6. **OAuth2認証がブロック** 7日間
+7. **7日後に自動BAN解除** + OAuth2再認証
+
+**BAN期間**: 7日間（604,800秒）
+
+**使用方法**:
+
+**方法1: Token & Session Manager UI（推奨）**
+
+1. `http://{your-fqdn}/token-session-manager` にアクセス（管理者のみ）
+2. **Active Users** タブをクリック
+3. メールアドレスでユーザーを検索
+4. **🔥 即時BAN (7日間)** ボタンをクリック
+5. ダイアログでBANを確認
+
+**期待されるUI動作**:
+- 成功メッセージ: "✅ {email} を即時BANしました(7日間)"
+- 削除されたセッション数が表示される
+- Active Usersリストが自動的に更新される
+- ユーザー行が赤色でハイライトされBANステータスバッジが表示
+
+**方法2: API経由でBAN**
+
+```bash
+curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_email": "user@example.com"
+  }'
+```
+
+**期待されるレスポンス**:
+```json
+{
+  "message": "User banned successfully",
+  "user_email": "user@example.com",
+  "deleted_count": 2,
+  "ban_duration_seconds": 604800,
+  "deleted_by": "admin@example.com"
+}
+```
+
+**ユーザーのBAN解除**:
+
+```bash
+curl -X DELETE http://{your-fqdn}/api/admin/sessions/unban/{email} \
+  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
+```
 
 ### 強制ログアウト機能
 
-管理者はユーザーのセッションを強制的に削除して、即座にアクセスを無効化できます。システムはUIベースとAPIベースの両方の管理方法を提供します。
+管理者はユーザーのセッションを強制的に削除して、即座にアクセスを無効化できます。
 
 #### 動作の仕組み
 
-1. **管理者がセッションを削除** Token & Session Manager UIまたはAPI経由
+1. **管理者がセッションを削除** Sessionsタブまたはapi経由
 2. **セッションがRedisから即座に削除される**
 3. **ユーザーの次のリクエストが401 Unauthorizedで失敗**
 4. **ユーザーが自動的にログイン画面にリダイレクトされる**
@@ -453,28 +645,6 @@ curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
 {
   "message": "Session deleted successfully",
   "session_key": "_oauth2_proxy-abc123...",
-  "deleted_by": "admin@example.com"
-}
-```
-
-**方法3: ユーザーの全セッション削除（API）**
-
-```bash
-# 特定ユーザーの全セッションを削除
-curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
-  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_email": "user@example.com"
-  }'
-```
-
-**期待されるレスポンス**:
-```json
-{
-  "message": "User sessions deleted successfully",
-  "user_email": "user@example.com",
-  "deleted_count": 2,
   "deleted_by": "admin@example.com"
 }
 ```
@@ -560,47 +730,28 @@ sudo docker compose logs -f openresty
 | `/api/token/info?token_id=xxx` | GET | トークン詳細取得 |
 | `/api/token/revoke` | POST | トークンを失効 |
 
-### セッション管理API（NEW）
+### 管理者トークン・セッション管理API
 
 | エンドポイント | メソッド | 説明 | 認証要件 |
 |--------------|---------|------|----------|
+| `/api/admin/tokens` | GET | 全ユーザーのトークン一覧を取得 | 管理者のみ |
+| `/api/admin/tokens/{token_id}` | DELETE | 任意のユーザーのトークン失効 | 管理者のみ |
 | `/api/admin/sessions` | GET | 全アクティブセッション一覧を取得 | 管理者のみ |
 | `/api/admin/sessions/{session_key}` | DELETE | 特定のセッションを削除 | 管理者のみ |
-| `/api/admin/sessions/revoke-user` | POST | ユーザーの全セッションを削除 | 管理者のみ |
+| `/api/admin/sessions/active-users` | GET | アクティブユーザー一覧を取得 | 管理者のみ |
+| `/api/admin/sessions/revoke-user` | POST | ユーザーBAN - 全セッション失効 | 管理者のみ |
+| `/api/admin/sessions/unban/{email}` | DELETE | ユーザーBAN解除 | 管理者のみ |
 | `/api/admin/sessions/stats` | GET | セッション統計を取得 | 管理者のみ |
-
-#### セッションAPI使用例
-
-**全セッション一覧**:
-```bash
-curl http://{your-fqdn}/api/admin/sessions \
-  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
-```
-
-**セッション統計取得**:
-```bash
-curl http://{your-fqdn}/api/admin/sessions/stats \
-  -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
-```
-
-レスポンス:
-```json
-{
-  "total_sessions": 15,
-  "unique_users": 8,
-  "user_sessions": {
-    "user1@example.com": 2,
-    "user2@example.com": 1,
-    "admin@example.com": 3
-  }
-}
-```
+| `/api/admin/redis/cleanup/preview` | GET | クリーンアップ対象プレビュー | 管理者のみ |
+| `/api/admin/redis/cleanup` | POST | クリーンアップ実行 | 管理者のみ |
+| `/api/admin/redis/cleanup/logs` | GET | クリーンアップログ表示 | 管理者のみ |
 
 ### ユーザー管理
 
 1. **ユーザー追加**: Auth0ダッシュボードで追加
 2. **ユーザー削除**: Auth0から削除 → 全トークンが24時間以内に無効化
-3. **強制ログアウト**: UIまたはAPI経由でセッション削除機能を使用（即座に有効）
+3. **緊急BAN**: Active Usersタブの即時BAN機能を使用（即座、7日間ブロック）
+4. **強制ログアウト**: Sessionsタブ経由でセッション削除機能を使用（即座に有効）
 
 ---
 
@@ -614,7 +765,9 @@ curl http://{your-fqdn}/api/admin/sessions/stats \
 - ✅ `.env`ファイルのパーミッション設定: `chmod 600 .env`
 - ✅ Auth0でMFAを有効化
 - ✅ Langfuseで不審な活動を監視
+- ✅ 緊急時の脅威対応には即時BAN機能を使用
 - ✅ 即座のユーザーロックアウトにはセッション削除機能を使用
+- ✅ クリーンアップログを定期的に確認し、異常を検出
 - ✅ Token & Session Manager経由でアクティブセッションを定期的に監査
 
 ### OAuth2セッション検証
@@ -623,13 +776,14 @@ curl http://{your-fqdn}/api/admin/sessions/stats \
 - JWTトークンは全APIリクエストで検証されます
 - トークン失効はRedisブラックリスト経由で即座に有効化
 - OAuth2のメールアドレスが全LiteLLM APIリクエストに付与され、ユーザー毎の追跡が可能
-- **強制ログアウト機能付きセッション削除**（NEW）
-- **リアルタイムセッション監視**（NEW）
+- **強制ログアウト機能付きセッション削除**
+- **7日間ブロック付き即時BAN機能**
+- **リアルタイムセッション監視**
 
 **実装予定の強化機能**:
 - OAuth2セッションが存在し有効である必要があります
 - セッションは24時間ごとに失効します
-- OAuth2 未認証者は24時間後にアクセス不可となります
+- OAuth2未認証者は24時間後にアクセス不可となります
 - JWTトークンの自動更新機能（実装予定）
 
 ---
@@ -644,6 +798,7 @@ curl http://{your-fqdn}/api/admin/sessions/stats \
 | [OAUTH2_SESSION_CHECK_GUIDE.md](docs/OAUTH2_SESSION_CHECK_GUIDE.md) | セッション検証機能 |
 | [OPERATIONS.md](docs/OPERATIONS.md) | 日常運用ガイド |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | よくある問題 |
+| [CHANGELOG.md](CHANGELOG.md) | バージョン履歴 |
 
 ---
 
@@ -659,6 +814,9 @@ curl http://{your-fqdn}/api/admin/sessions/stats \
 | 接続拒否 | コンテナの状態を確認: `docker compose ps` |
 | セッション削除が機能しない | Redis接続とセッションキー形式を確認 |
 | UIでセッションが表示されない | 管理者ユーザーでログインしていることを確認 |
+| クリーンアップ動作せず | 管理者権限とRedis接続を確認 |
+| BANが効かない | メールアドレスの一致とBAN record作成を確認 |
+| 削除明細を展開できない | token_session_manager v4.0+を使用していることを確認 |
 
 ### デバッグモード
 
