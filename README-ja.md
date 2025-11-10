@@ -20,7 +20,7 @@
   - ユーザー削除時の即時トークン無効化
   - Redisベースのトークンブラックリスト管理
   - **強制ログアウト機能付きセッション削除**
-  - **即時BAN機能（7日間強制ログアウト）**（NEW）
+  - **即時BAN機能（7日間強制ログアウト）** - OAuth2とJWT token両方に対応（NEW）
   - OAuth2セッションチェック（実装予定：毎日再認証）
 
 - **📊 完全な可観測性**
@@ -34,7 +34,7 @@
   - ユーザーごとに複数トークン発行可能
   - カスタム有効期限設定
   - **リアルタイムセッション監視**
-  - **アクティブユーザー追跡とBAN管理**（NEW）
+  - **アクティブユーザー追跡とBAN管理** - OAuth2とJWT token統合管理（NEW）
   - **強制ログアウト機能**
 
 - **🧹 Redisクリーンアップ**（NEW）
@@ -52,7 +52,6 @@
 ---
 
 ## 🏗️ アーキテクチャ
-
 ```
 ┌─────────────┐
 │   Client    │ (ブラウザ/Roo Code/CLI)
@@ -62,8 +61,9 @@
        ↓
 ┌──────────────────────────────────────┐
 │         OpenResty (ゲートウェイ)      │
-│  - JWT検証                           │
+│  - JWT検証 + BAN状態チェック          │
 │  - OAuth2セッションチェック           │
+│  - Active User追跡                   │
 │  - リクエストルーティング             │
 └──────┬───────────┬───────────────────┘
        │           │
@@ -72,7 +72,8 @@
        │                ┌──────────┐
        │                │  Redis   │
        │                │(トークン  │
-       │                │ セッション)│
+       │                │ セッション│
+       │                │ BAN状態) │
        │                └──────────┘
        │
     ┌──┴─────────────────┐
@@ -105,14 +106,12 @@
 ## 🚀 クイックスタート
 
 ### 1. リポジトリのクローン
-
 ```bash
 git clone https://github.com/nakacya/llm-gateway-oauth.git
 cd llm-gateway-oauth
 ```
 
 ### 2. 環境変数の設定
-
 ```bash
 # サンプル設定をコピー
 cp .env_sample .env
@@ -154,7 +153,6 @@ ANTHROPIC_API_KEY=sk-ant-your-api-key
 `{your-fqdn}`は実際のドメインに置き換えてください（例：`localhost`、`litellm.example.com`）
 
 ### 4. カスタムOpenRestyイメージのビルド
-
 ```bash
 # 必要なモジュールを含むOpenRestyをビルド
 sudo docker compose build openresty
@@ -166,7 +164,6 @@ sudo docker compose build openresty
 ```
 
 ### 5. サービスの起動
-
 ```bash
 # 全コンテナを起動
 sudo docker compose up -d
@@ -176,7 +173,6 @@ sudo docker compose ps
 ```
 
 ### 6. インストール確認
-
 ```bash
 # 全コンテナが起動していることを確認
 sudo docker compose ps
@@ -209,9 +205,11 @@ curl -I http://{your-fqdn}
 統合管理インターフェースで包括的な制御を提供:
 
 **👥 Active Usersタブ**（NEW）:
-- 全アクティブユーザーとセッション数の表示
+- **OAuth2とJWT token両方のユーザーを統合表示**
+- 全アクティブユーザーとセッション/トークン数の表示
+- 認証方法の識別（OAuth2 / JWT）
 - 最終アクセス時刻と有効期限の追跡
-- **即時BAN機能**（7日間強制ログアウト）
+- **即時BAN機能**（7日間強制ログアウト）- すべてのアクセス経路に適用
 - **必要に応じたBAN解除**
 - BAN残り時間の表示
 - 統計ダッシュボード（総ユーザー数、BANユーザー数）
@@ -259,7 +257,6 @@ curl -I http://{your-fqdn}
 4. 生成されたJWTトークンをコピーしてAPIアクセスに使用
 
 ### API経由でJWTトークンを生成
-
 ```bash
 curl -X POST http://{your-fqdn}/api/token/generate \
   -H "Cookie: _oauth2_proxy=YOUR_COOKIE" \
@@ -271,7 +268,6 @@ curl -X POST http://{your-fqdn}/api/token/generate \
 ```
 
 ### JWTを使用したAPI呼び出し
-
 ```bash
 curl -X POST http://{your-fqdn}/v1/messages \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -286,7 +282,6 @@ curl -X POST http://{your-fqdn}/v1/messages \
 ### Roo Codeの設定
 
 VS Codeの設定で以下を追加:
-
 ```json
 {
   "rooCode.api.endpoint": "http://{your-fqdn}/v1",
@@ -304,7 +299,6 @@ VS Codeの設定で以下を追加:
 ### サポートされているモデル
 
 `litellm_config.yaml`でモデルを追加:
-
 ```yaml
 model_list:
   - model_name: claude-sonnet-4
@@ -324,7 +318,6 @@ model_list:
 最大: 90日（7,776,000秒）
 
 `lua/token_generator.lua`で変更:
-
 ```lua
 local MAX_EXPIRES_IN = 7776000  -- 90日
 ```
@@ -334,7 +327,6 @@ local MAX_EXPIRES_IN = 7776000  -- 90日
 デフォルト: 24時間
 
 `oauth2_proxy.cfg`で変更:
-
 ```ini
 cookie_expire = "24h"
 ```
@@ -342,7 +334,6 @@ cookie_expire = "24h"
 ### 管理者設定
 
 `.env`で管理者ユーザーを設定:
-
 ```bash
 # スーパー管理者（全権限）
 SUPER_ADMIN_EMAIL=admin@example.com
@@ -354,7 +345,6 @@ ADMIN_EMAILS=admin1@example.com,admin2@example.com
 ### クリーンアップログ保持期間
 
 `.env`で設定:
-
 ```bash
 # クリーンアップログ保持期間（日数）
 CLEANUP_LOG_RETENTION_DAYS=30
@@ -365,7 +355,6 @@ CLEANUP_LOG_RETENTION_DAYS=30
 インストール後、LiteLLMで**共有APIキー**（Virtual Key）を作成する必要があります：
 
 #### ステップ1: LiteLLM管理UIにアクセス
-
 ```
 http://{your-fqdn}:4000
 ```
@@ -384,14 +373,12 @@ http://{your-fqdn}:4000
 5. 生成されたキーをコピー（`sk-...`で始まる）
 
 #### ステップ3: .envを更新
-
 ```bash
 # .envに追加
 LITELLM_SHARED_KEY=sk-xxxxxxxxxxxxxxxx  # 生成されたvirtual key
 ```
 
 #### ステップ4: サービスを再起動
-
 ```bash
 sudo docker compose restart
 ```
@@ -412,7 +399,6 @@ LiteLLMのEnd User機能を使用して、個別のユーザー予算制限を�
 #### 新規顧客の作成（API）
 
 まだリクエストを行っていないユーザーの場合：
-
 ```bash
 curl -X POST 'http://{your-fqdn}:4000/customer/new' \
   -H 'Authorization: Bearer YOUR_MASTER_KEY' \
@@ -429,7 +415,6 @@ curl -X POST 'http://{your-fqdn}:4000/customer/new' \
 #### 既存顧客の予算更新（API）
 
 既にリクエストを行ったことがあるユーザーの場合：
-
 ```bash
 curl -X POST 'http://{your-fqdn}:4000/customer/update' \
   -H 'Authorization: Bearer YOUR_MASTER_KEY' \
@@ -489,10 +474,10 @@ Redisクリーンアップ機能は、時間とともに蓄積される孤立デ
 ### 使用方法
 
 1. **Cleanupタブにアクセス**:
-   ```
+```
    https://{your-fqdn}/token-session-manager
    → 「🧹 Cleanup」タブをクリック
-   ```
+```
 
 2. **クリーンアップ対象のプレビュー**:
    - 「🔍 プレビュー（削除せず確認）」をクリック
@@ -546,7 +531,7 @@ curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/logs \
 
 ### 即時BAN機能（NEW）
 
-管理者は、退職や セキュリティインシデントなどの緊急時に、ユーザーを即座にBANできます。
+管理者は、退職やセキュリティインシデントなどの緊急時に、ユーザーを即座にBANできます。
 
 **動作の仕組み**:
 
@@ -554,11 +539,21 @@ curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/logs \
 2. **全ユーザーセッションが即座に削除** Redisから
 3. **BAN記録が作成される** 7日間有効期限
 4. **ユーザーの次のリクエストが失敗** 401 Unauthorized
-5. **ユーザーがログイン画面にリダイレクト**
-6. **OAuth2認証がブロック** 7日間
-7. **7日後に自動BAN解除** + OAuth2再認証
+   - **OAuth2認証**: ログイン画面へリダイレクト、7日間ブロック
+   - **JWT token認証**: 401エラー、BAN残り時間表示
+5. **すべてのアクセス経路でBAN適用**
+   - ブラウザアクセス（OAuth2）
+   - API/CLIアクセス（JWT token）
+   - Roo Code VS Code extension（JWT token）
+6. **7日後に自動BAN解除** + 再認証で利用再開
 
 **BAN期間**: 7日間（604,800秒）
+
+**対応アクセス方法**:
+- ✅ OAuth2ブラウザアクセス
+- ✅ JWT token API呼び出し
+- ✅ Roo Code / VS Code extension
+- ✅ CLI tools
 
 **使用方法**:
 
@@ -577,7 +572,6 @@ curl -X GET https://{your-fqdn}/api/admin/redis/cleanup/logs \
 - ユーザー行が赤色でハイライトされBANステータスバッジが表示
 
 **方法2: API経由でBAN**
-
 ```bash
 curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
   -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
@@ -598,8 +592,25 @@ curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
 }
 ```
 
-**ユーザーのBAN解除**:
+**BANされたユーザーがJWT tokenでアクセスした場合**:
+```bash
+# リクエスト
+curl -X POST http://{your-fqdn}/v1/messages \
+  -H "Authorization: Bearer BANNED_USER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-4","max_tokens":100,"messages":[...]}'
 
+# レスポンス
+HTTP/1.1 401 Unauthorized
+{
+  "error": {
+    "type": "authentication_error",
+    "message": "User is banned for 6 days 23 hours"
+  }
+}
+```
+
+**ユーザーのBAN解除**:
 ```bash
 curl -X DELETE http://{your-fqdn}/api/admin/sessions/unban/{email} \
   -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
@@ -633,7 +644,6 @@ curl -X DELETE http://{your-fqdn}/api/admin/sessions/unban/{email} \
 - 削除されたセッションはリストに表示されなくなる
 
 **方法2: 単一セッションの削除（API）**
-
 ```bash
 # UIまたはAPIからセッションキーを取得してから削除
 curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
@@ -653,6 +663,8 @@ curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
 
 **実装**:
 - **session_admin.lua**: 全てのセッション管理APIエンドポイントを処理
+- **auth_handler.lua**: JWT token認証時にBAN状態をチェック
+- **active_user_tracker.lua**: OAuth2認証時にBAN状態をチェック
 - **OAuth2 Proxy**: セッションをRedisに `_oauth2_proxy-*` のキーパターンで保存
 - **セッションデータ**: ユーザーメールアドレス、作成時刻、有効期限、認証メタデータを含む
 
@@ -672,10 +684,12 @@ session:*            # 汎用パターン
 - ✅ ユーザーごとの複数セッションをサポート
 - ✅ 管理者監査ログを含む
 - ✅ 他のユーザーのセッションに影響なし
+- ✅ OAuth2とJWT token両方のBAN状態チェック
 
 **ユーザー体験**:
 ```
-管理者がセッションを削除
+【OAuth2ユーザーの場合】
+管理者がセッション削除/BAN実行
   ↓
 ユーザーがブラウジングを続ける
   ↓
@@ -685,7 +699,19 @@ session:*            # 汎用パターン
   ↓
 Auth0ログイン画面への自動リダイレクト
   ↓
-システムにアクセスするには再ログインが必要
+BAN中の場合: 7日間ログイン不可
+BAN解除後: 再ログインで利用再開
+
+【JWT tokenユーザーの場合】
+管理者がBAN実行
+  ↓
+ユーザーがAPI/CLI/Roo Codeからアクセス
+  ↓
+JWT token検証 + BAN状態チェック
+  ↓
+401 Unauthorized: "User is banned for X days Y hours"
+  ↓
+BAN解除後: 既存のJWT tokenで即座に利用再開
 ```
 
 ---
@@ -695,7 +721,6 @@ Auth0ログイン画面への自動リダイレクト
 ### Langfuseダッシュボード
 
 トレーシングと分析にアクセス:
-
 ```
 http://{your-fqdn}:3000
 ```
@@ -707,7 +732,6 @@ http://{your-fqdn}:3000
 - レスポンス時間
 
 ### ログの確認
-
 ```bash
 # 全サービス
 sudo docker compose logs -f
@@ -750,7 +774,7 @@ sudo docker compose logs -f openresty
 
 1. **ユーザー追加**: Auth0ダッシュボードで追加
 2. **ユーザー削除**: Auth0から削除 → 全トークンが24時間以内に無効化
-3. **緊急BAN**: Active Usersタブの即時BAN機能を使用（即座、7日間ブロック）
+3. **緊急BAN**: Active Usersタブの即時BAN機能を使用（即座、7日間ブロック、全アクセス経路に適用）
 4. **強制ログアウト**: Sessionsタブ経由でセッション削除機能を使用（即座に有効）
 
 ---
@@ -770,15 +794,26 @@ sudo docker compose logs -f openresty
 - ✅ クリーンアップログを定期的に確認し、異常を検出
 - ✅ Token & Session Manager経由でアクティブセッションを定期的に監査
 
-### OAuth2セッション検証
+### OAuth2セッション検証とBAN機能
 
 **現在の実装**:
-- JWTトークンは全APIリクエストで検証されます
-- トークン失効はRedisブラックリスト経由で即座に有効化
-- OAuth2のメールアドレスが全LiteLLM APIリクエストに付与され、ユーザー毎の追跡が可能
-- **強制ログアウト機能付きセッション削除**
-- **7日間ブロック付き即時BAN機能**
-- **リアルタイムセッション監視**
+- **OAuth2認証**:
+  - セッション検証が全リクエストで実行
+  - BAN状態チェック（`active_user_deleted:*`）
+  - BANされたユーザーは7日間ログイン不可
+- **JWT token認証**:
+  - JWT検証が全APIリクエストで実行
+  - BAN状態チェック（`active_user_deleted:*`）
+  - BANされたユーザーは401 Unauthorizedを返す
+- **統合管理**:
+  - OAuth2のメールアドレスが全LiteLLM APIリクエストに付与
+  - OAuth2とJWT token両方のユーザーがActive Usersタブに表示
+  - 認証方法（OAuth2/JWT）の記録
+  - ユーザー毎の追跡が可能
+- **トークン失効**: Redisブラックリスト経由で即座に有効化
+- **強制ログアウト機能**: セッション削除による即座のアクセス無効化
+- **即時BAN機能**: 全アクセス経路で7日間ブロック
+- **リアルタイムセッション監視**: Active User追跡
 
 **実装予定の強化機能**:
 - OAuth2セッションが存在し有効である必要があります
@@ -816,12 +851,12 @@ sudo docker compose logs -f openresty
 | UIでセッションが表示されない | 管理者ユーザーでログインしていることを確認 |
 | クリーンアップ動作せず | 管理者権限とRedis接続を確認 |
 | BANが効かない | メールアドレスの一致とBAN record作成を確認 |
+| JWT tokenユーザーがBAN されない | auth_handler.luaのBAN状態チェック実装を確認 |
 | 削除明細を展開できない | token_session_manager v4.0+を使用していることを確認 |
 
 ### デバッグモード
 
 `nginx.conf`で詳細ログを有効化:
-
 ```nginx
 error_log /var/log/nginx/error.log debug;
 ```

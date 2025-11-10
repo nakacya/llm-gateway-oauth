@@ -20,7 +20,7 @@
   - Immediate token revocation on user removal
   - Redis-based token blacklist management
   - **Session deletion with force logout**
-  - **Instant user BAN feature (7-day forced logout)** (NEW)
+  - **Instant user BAN feature (7-day forced logout)** - Works with both OAuth2 and JWT tokens (NEW)
   - OAuth2 session check (planned: daily re-authentication)
 
 - **📊 Complete Observability**
@@ -34,7 +34,7 @@
   - Multiple tokens per user
   - Custom expiration settings
   - **Real-time session monitoring**
-  - **Active user tracking with BAN management** (NEW)
+  - **Active user tracking with BAN management** - Unified management for OAuth2 and JWT users (NEW)
   - **Force logout functionality**
 
 - **🧹 Redis Cleanup** (NEW)
@@ -52,7 +52,6 @@
 ---
 
 ## 🏗️ Architecture
-
 ```
 ┌─────────────┐
 │   Client    │ (Browser/Roo Code/CLI)
@@ -62,8 +61,9 @@
        ↓
 ┌──────────────────────────────────────┐
 │         OpenResty (Gateway)          │
-│  - JWT Validation                    │
+│  - JWT Validation + BAN Check       │
 │  - OAuth2 Session Check              │
+│  - Active User Tracking              │
 │  - Request Routing                   │
 └──────┬───────────┬───────────────────┘
        │           │
@@ -72,7 +72,8 @@
        │                ┌──────────┐
        │                │  Redis   │
        │                │ (Tokens  │
-       │                │  Sessions)│
+       │                │  Sessions│
+       │                │  BAN)    │
        │                └──────────┘
        │
     ┌──┴─────────────────┐
@@ -105,14 +106,12 @@
 ## 🚀 Quick Start
 
 ### 1. Clone the Repository
-
 ```bash
 git clone https://github.com/nakacya/llm-gateway-oauth.git
 cd llm-gateway-oauth
 ```
 
 ### 2. Configure Environment Variables
-
 ```bash
 # Copy sample configuration
 cp .env_sample .env
@@ -154,7 +153,6 @@ ANTHROPIC_API_KEY=sk-ant-your-api-key
 Replace `{your-fqdn}` with your actual domain (e.g., `localhost`, `litellm.example.com`)
 
 ### 4. Build Custom OpenResty Image
-
 ```bash
 # Build OpenResty with required modules
 sudo docker compose build openresty
@@ -166,7 +164,6 @@ sudo docker compose build openresty
 ```
 
 ### 5. Start Services
-
 ```bash
 # Start all containers
 sudo docker compose up -d
@@ -176,7 +173,6 @@ sudo docker compose ps
 ```
 
 ### 6. Verify Installation
-
 ```bash
 # Check all containers are running
 sudo docker compose ps
@@ -209,9 +205,11 @@ curl -I http://{your-fqdn}
 The unified management interface provides comprehensive control:
 
 **👥 Active Users Tab** (NEW):
-- View all active users with session counts
+- **Unified display of both OAuth2 and JWT token users**
+- View all active users with session/token counts
+- Identify authentication method (OAuth2 / JWT)
 - Track last access time and expiration
-- **Instant BAN feature** (7-day forced logout)
+- **Instant BAN feature** (7-day forced logout) - Applied across all access methods
 - **Unban users** when needed
 - Display BAN status with remaining time
 - Statistics dashboard (total users, banned users)
@@ -259,7 +257,6 @@ The unified management interface provides comprehensive control:
 4. Copy the generated JWT token for API access
 
 ### Generate JWT Token via API
-
 ```bash
 curl -X POST http://{your-fqdn}/api/token/generate \
   -H "Cookie: _oauth2_proxy=YOUR_COOKIE" \
@@ -271,7 +268,6 @@ curl -X POST http://{your-fqdn}/api/token/generate \
 ```
 
 ### API Call with JWT
-
 ```bash
 curl -X POST http://{your-fqdn}/v1/messages \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -286,7 +282,6 @@ curl -X POST http://{your-fqdn}/v1/messages \
 ### Roo Code Configuration
 
 Configure in VS Code settings:
-
 ```json
 {
   "rooCode.api.endpoint": "http://{your-fqdn}/v1",
@@ -304,7 +299,6 @@ Replace `{your-fqdn}` with your actual domain.
 ### Supported Models
 
 Add models in `litellm_config.yaml`:
-
 ```yaml
 model_list:
   - model_name: claude-sonnet-4
@@ -324,7 +318,6 @@ Default: 30 days (2,592,000 seconds)
 Maximum: 90 days (7,776,000 seconds)
 
 Modify in `lua/token_generator.lua`:
-
 ```lua
 local MAX_EXPIRES_IN = 7776000  -- 90 days
 ```
@@ -334,7 +327,6 @@ local MAX_EXPIRES_IN = 7776000  -- 90 days
 Default: 24 hours
 
 Modify in `oauth2_proxy.cfg`:
-
 ```ini
 cookie_expire = "24h"
 ```
@@ -342,7 +334,6 @@ cookie_expire = "24h"
 ### Admin Configuration
 
 Configure admin users in `.env`:
-
 ```bash
 # Super admin (full access)
 SUPER_ADMIN_EMAIL=admin@example.com
@@ -354,7 +345,6 @@ ADMIN_EMAILS=admin1@example.com,admin2@example.com
 ### Cleanup Log Retention
 
 Configure in `.env`:
-
 ```bash
 # Cleanup log retention period (days)
 CLEANUP_LOG_RETENTION_DAYS=30
@@ -365,7 +355,6 @@ CLEANUP_LOG_RETENTION_DAYS=30
 After installation, you must create a **Shared API Key** (Virtual Key) in LiteLLM:
 
 #### Step 1: Access LiteLLM Admin UI
-
 ```
 http://{your-fqdn}:4000
 ```
@@ -384,14 +373,12 @@ Login with your master key (set in `.env` as `LITELLM_MASTER_KEY`)
 5. Copy the generated key (starts with `sk-...`)
 
 #### Step 3: Update .env
-
 ```bash
 # Add to .env
 LITELLM_SHARED_KEY=sk-xxxxxxxxxxxxxxxx  # Your generated virtual key
 ```
 
 #### Step 4: Restart Services
-
 ```bash
 sudo docker compose restart
 ```
@@ -412,7 +399,6 @@ LiteLLM supports individual user budget limits using the End User feature:
 #### Create New Customer with Budget (API)
 
 For users who haven't made any requests yet:
-
 ```bash
 curl -X POST 'http://{your-fqdn}:4000/customer/new' \
   -H 'Authorization: Bearer YOUR_MASTER_KEY' \
@@ -429,7 +415,6 @@ curl -X POST 'http://{your-fqdn}:4000/customer/new' \
 #### Update Existing Customer Budget (API)
 
 For users who have already made requests:
-
 ```bash
 curl -X POST 'http://{your-fqdn}:4000/customer/update' \
   -H 'Authorization: Bearer YOUR_MASTER_KEY' \
@@ -489,10 +474,10 @@ The Redis Cleanup feature automatically identifies and removes orphaned data tha
 ### Usage
 
 1. **Access Cleanup Tab**:
-   ```
+```
    https://{your-fqdn}/token-session-manager
    → Click "🧹 Cleanup" tab
-   ```
+```
 
 2. **Preview Cleanup Targets**:
    - Click "🔍 Preview (View without deleting)"
@@ -554,11 +539,21 @@ Administrators can immediately ban users for emergency situations like employee 
 2. **All user sessions deleted** from Redis immediately
 3. **BAN record created** with 7-day expiration
 4. **User's next request fails** with 401 Unauthorized
-5. **User redirected** to login screen
-6. **OAuth2 authentication blocked** for 7 days
-7. **Auto-unban after 7 days** + OAuth2 re-authentication
+   - **OAuth2 authentication**: Redirected to login, blocked for 7 days
+   - **JWT token authentication**: 401 error with BAN remaining time
+5. **BAN applied across all access methods**
+   - Browser access (OAuth2)
+   - API/CLI access (JWT token)
+   - Roo Code VS Code extension (JWT token)
+6. **Auto-unban after 7 days** + re-authentication resumes access
 
 **BAN Duration**: 7 days (604,800 seconds)
+
+**Supported Access Methods**:
+- ✅ OAuth2 browser access
+- ✅ JWT token API calls
+- ✅ Roo Code / VS Code extension
+- ✅ CLI tools
 
 **Usage Methods**:
 
@@ -571,13 +566,12 @@ Administrators can immediately ban users for emergency situations like employee 
 5. Confirm BAN in the dialog
 
 **Expected UI behavior**:
-- Success message: "✅ {email} を即時BANしました(7日間)"
+- Success message: "✅ {email} has been instantly banned (7 days)"
 - Session count displayed
 - Active Users list refreshes automatically
 - User row highlighted in red with BAN status badge
 
 **Method 2: BAN via API**
-
 ```bash
 curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
   -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE" \
@@ -598,8 +592,25 @@ curl -X POST http://{your-fqdn}/api/admin/sessions/revoke-user \
 }
 ```
 
-**Unban User**:
+**When banned user tries to access via JWT token**:
+```bash
+# Request
+curl -X POST http://{your-fqdn}/v1/messages \
+  -H "Authorization: Bearer BANNED_USER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-4","max_tokens":100,"messages":[...]}'
 
+# Response
+HTTP/1.1 401 Unauthorized
+{
+  "error": {
+    "type": "authentication_error",
+    "message": "User is banned for 6 days 23 hours"
+  }
+}
+```
+
+**Unban User**:
 ```bash
 curl -X DELETE http://{your-fqdn}/api/admin/sessions/unban/{email} \
   -H "Cookie: _oauth2_proxy=YOUR_ADMIN_COOKIE"
@@ -628,12 +639,11 @@ Administrators can forcefully delete user sessions to immediately revoke access.
 5. Confirm deletion in the dialog
 
 **Expected UI behavior**:
-- Success message displayed: "Session を削除しました"
+- Success message displayed: "Session deleted successfully"
 - Session list automatically refreshes
 - Deleted session no longer appears in the list
 
 **Method 2: Delete Single Session (API)**
-
 ```bash
 # Get session key from UI or API, then delete
 curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
@@ -653,6 +663,8 @@ curl -X DELETE http://{your-fqdn}/api/admin/sessions/{SESSION_KEY} \
 
 **Implementation**:
 - **session_admin.lua**: Handles all session management API endpoints
+- **auth_handler.lua**: Checks BAN status during JWT token authentication
+- **active_user_tracker.lua**: Checks BAN status during OAuth2 authentication
 - **OAuth2 Proxy**: Stores sessions in Redis with key pattern `_oauth2_proxy-*`
 - **Session data**: Contains user email, creation time, expiration, and auth metadata
 
@@ -672,10 +684,12 @@ session:*            # Generic pattern
 - ✅ Multiple sessions per user supported
 - ✅ Admin audit logging included
 - ✅ No impact on other users' sessions
+- ✅ BAN status check for both OAuth2 and JWT tokens
 
 **User Experience**:
 ```
-Session deleted by admin
+【OAuth2 Users】
+Session deleted/BAN executed by admin
   ↓
 User continues browsing
   ↓
@@ -685,7 +699,19 @@ Next request to any protected endpoint
   ↓
 Automatic redirect to Auth0 login screen
   ↓
-User must log in again to access system
+If banned: Cannot log in for 7 days
+After unban: Can log in and resume access
+
+【JWT Token Users】
+BAN executed by admin
+  ↓
+User accesses via API/CLI/Roo Code
+  ↓
+JWT token validation + BAN status check
+  ↓
+401 Unauthorized: "User is banned for X days Y hours"
+  ↓
+After unban: Existing JWT token works immediately
 ```
 
 ---
@@ -695,7 +721,6 @@ User must log in again to access system
 ### Langfuse Dashboard
 
 Access tracing and analytics:
-
 ```
 http://{your-fqdn}:3000
 ```
@@ -707,7 +732,6 @@ http://{your-fqdn}:3000
 - Response times
 
 ### View Logs
-
 ```bash
 # All services
 sudo docker compose logs -f
@@ -750,7 +774,7 @@ sudo docker compose logs -f openresty
 
 1. **Add User**: Add to Auth0 dashboard
 2. **Remove User**: Delete from Auth0 → All tokens become invalid within 24 hours
-3. **Emergency BAN**: Use instant BAN feature in Active Users tab (immediate, 7-day block)
+3. **Emergency BAN**: Use instant BAN feature in Active Users tab (immediate, 7-day block, applies to all access methods)
 4. **Force Logout**: Use session deletion feature via Sessions tab (immediate effect)
 
 ---
@@ -770,15 +794,26 @@ sudo docker compose logs -f openresty
 - ✅ Review cleanup logs regularly for anomalies
 - ✅ Regularly audit active sessions via Token & Session Manager
 
-### OAuth2 Session Validation
+### OAuth2 Session Validation & BAN Feature
 
 **Current implementation**:
-- JWT tokens are validated on every API request
-- Token revocation is immediate via Redis blacklist
-- OAuth2 email is attached to all LiteLLM API requests for per-user tracking
-- **Session deletion with force logout**
-- **Instant BAN feature with 7-day block**
-- **Real-time session monitoring**
+- **OAuth2 authentication**:
+  - Session validation on every request
+  - BAN status check (`active_user_deleted:*`)
+  - Banned users cannot log in for 7 days
+- **JWT token authentication**:
+  - JWT validation on every API request
+  - BAN status check (`active_user_deleted:*`)
+  - Banned users receive 401 Unauthorized
+- **Unified management**:
+  - OAuth2 email attached to all LiteLLM API requests
+  - Both OAuth2 and JWT token users displayed in Active Users tab
+  - Authentication method (OAuth2/JWT) recorded
+  - Per-user tracking enabled
+- **Token revocation**: Immediate via Redis blacklist
+- **Force logout**: Session deletion for immediate access revocation
+- **Instant BAN**: 7-day block across all access methods
+- **Real-time monitoring**: Active User tracking
 
 **Planned enhancements**:
 - OAuth2 session must exist and be valid
@@ -816,12 +851,12 @@ sudo docker compose logs -f openresty
 | Can't see sessions in UI | Ensure you're logged in as admin user |
 | Cleanup not working | Check admin permissions and Redis connectivity |
 | BAN not effective | Verify email matching and BAN record creation |
+| JWT token users not banned | Check auth_handler.lua BAN status check implementation |
 | Can't expand deletion details | Ensure using token_session_manager v4.0+ |
 
 ### Debug Mode
 
 Enable detailed logging in `nginx.conf`:
-
 ```nginx
 error_log /var/log/nginx/error.log debug;
 ```
